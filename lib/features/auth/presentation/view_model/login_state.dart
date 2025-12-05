@@ -1,5 +1,4 @@
 import 'package:spendsense_frontend/features/auth/domain/entities/user_entity.dart';
-git commit -m "feat(auth): add login screen and bloc logic"
 enum LoginStatus { initial, loading, success, failure }
 
 class LoginState {
