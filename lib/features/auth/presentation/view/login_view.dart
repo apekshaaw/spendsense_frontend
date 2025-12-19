@@ -184,16 +184,23 @@ class _LoginFormState extends State<_LoginForm> {
                             ),
                           ),
                           const SizedBox(height: 8),
-                          const Align(
-                            alignment: Alignment.centerRight,
-                            child: Text(
-                              'Forgot password?',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: AppColors.textGrey,
-                              ),
-                            ),
-                          ),
+                          Align(
+  alignment: Alignment.centerRight,
+  child: GestureDetector(
+    onTap: () {
+      Navigator.of(context).pushNamed(AppRoutes.forgotPassword);
+    },
+    child: const Text(
+      'Forgot password?',
+      style: TextStyle(
+        fontSize: 12,
+        color: AppColors.textGrey,
+        fontWeight: FontWeight.w600,
+      ),
+    ),
+  ),
+),
+
                           const SizedBox(height: 8),
                           Row(
                             children: const [
