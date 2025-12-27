@@ -1,17 +1,6 @@
-import 'package:flutter/material.dart';
+// lib/features/auth/presentation/view/add_goal_view.dart
+//
+// Bridge file to keep old imports working.
+// It simply re-exports the real AddGoalView in the home feature.
 
-class AddGoalView extends StatelessWidget {
-  const AddGoalView({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Add Goal'),
-      ),
-      body: const Center(
-        child: Text('Add Goal page'),
-      ),
-    );
-  }
-}
+export 'package:spendsense_frontend/features/home/presentation/view/add_goal_view.dart';
