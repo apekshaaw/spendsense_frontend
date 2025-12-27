@@ -1,6 +1,10 @@
-import '../../domain/entities/user_entity.dart';
-import '../../domain/repositories/auth_repository.dart';
+// lib/features/auth/data/repositories/auth_repository_impl.dart
+
+import 'package:spendsense_frontend/core/error/failure.dart';
+import 'package:spendsense_frontend/features/auth/domain/entities/user_entity.dart';
+import 'package:spendsense_frontend/features/auth/domain/repositories/auth_repository.dart';
 import '../datasources/auth_remote_datasource.dart';
+import '../models/user_model.dart';
 
 class AuthRepositoryImpl implements AuthRepository {
   final AuthRemoteDataSource remoteDataSource;
@@ -12,11 +16,21 @@ class AuthRepositoryImpl implements AuthRepository {
     required String email,
     required String password,
   }) async {
-    final userModel = await remoteDataSource.login(
-      email: email,
-      password: password,
-    );
-    return userModel; // UserModel extends UserEntity
+    try {
+      final UserModel userModel = await remoteDataSource.login(
+        email: email,
+        password: password,
+      );
+
+      // If UserModel already extends UserEntity, you can just return userModel.
+      return userModel; // or userModel.toEntity();
+    } on Failure {
+      // Just bubble up our Failure
+      rethrow;
+    } catch (e) {
+      // Anything else → wrap into Failure so ViewModel can handle it
+      throw Failure('Login failed: $e');
+    }
   }
 
   @override
@@ -26,12 +40,19 @@ class AuthRepositoryImpl implements AuthRepository {
     required String password,
     required String confirmPassword,
   }) async {
-    final userModel = await remoteDataSource.register(
-      name: name,
-      email: email,
-      password: password,
-      confirmPassword: confirmPassword,
-    );
-    return userModel;
+    try {
+      final UserModel userModel = await remoteDataSource.register(
+        name: name,
+        email: email,
+        password: password,
+        confirmPassword: confirmPassword,
+      );
+
+      return userModel; // or userModel.toEntity();
+    } on Failure {
+      rethrow;
+    } catch (e) {
+      throw Failure('Registration failed: $e');
+    }
   }
 }
