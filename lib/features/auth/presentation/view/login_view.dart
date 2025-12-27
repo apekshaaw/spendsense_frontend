@@ -65,6 +65,7 @@ class _LoginFormState extends State<_LoginForm> {
             }
 
             if (state.status == LoginStatus.success) {
+              // ✅ By the time we’re here, token is already saved in SharedPreferences
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Login successful')),
               );
@@ -185,22 +186,22 @@ class _LoginFormState extends State<_LoginForm> {
                           ),
                           const SizedBox(height: 8),
                           Align(
-  alignment: Alignment.centerRight,
-  child: GestureDetector(
-    onTap: () {
-      Navigator.of(context).pushNamed(AppRoutes.forgotPassword);
-    },
-    child: const Text(
-      'Forgot password?',
-      style: TextStyle(
-        fontSize: 12,
-        color: AppColors.textGrey,
-        fontWeight: FontWeight.w600,
-      ),
-    ),
-  ),
-),
-
+                            alignment: Alignment.centerRight,
+                            child: GestureDetector(
+                              onTap: () {
+                                Navigator.of(context)
+                                    .pushNamed(AppRoutes.forgotPassword);
+                              },
+                              child: const Text(
+                                'Forgot password?',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.textGrey,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ),
                           const SizedBox(height: 8),
                           Row(
                             children: const [
@@ -222,8 +223,7 @@ class _LoginFormState extends State<_LoginForm> {
                               onPressed: () {
                                 // Google sign in later
                               },
-                              icon:
-                                  const Icon(Icons.g_mobiledata, size: 24),
+                              icon: const Icon(Icons.g_mobiledata, size: 24),
                               label: const Text('Log in with Google'),
                               style: OutlinedButton.styleFrom(
                                 padding:
