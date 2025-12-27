@@ -1,9 +1,10 @@
 class ApiEndpoints {
-  ApiEndpoints._();
+  static const String baseUrl = "http://10.0.2.2:5001"; // emulator
 
-  // ANDROID EMULATOR (Node running on your laptop on port 5000)
-  static const String baseUrl = 'http://10.0.2.2:5000';
+  static const String login = "$baseUrl/api/auth/login";
+  static const String register = "$baseUrl/api/auth/register";
 
-  static const String login = '$baseUrl/api/auth/login';
-  static const String register = '$baseUrl/api/auth/signup';
+  static const String wants = "$baseUrl/api/wants";
+  static const String goals = "$baseUrl/api/goals";
+  static const String needs = "$baseUrl/api/needs";
 }
