@@ -113,6 +113,114 @@ class _AllNeedsViewState extends State<AllNeedsView> {
     }
   }
 
+  Future<void> _openEditNeed(Map<String, dynamic> need) async {
+    final id = (need['_id'] ?? '').toString();
+
+    final nameCtrl = TextEditingController(text: (need['name'] ?? '').toString());
+    final priceCtrl = TextEditingController(
+      text: ((need['price'] as num?)?.toDouble() ?? 0).toStringAsFixed(0),
+    );
+    final notesCtrl = TextEditingController(text: (need['notes'] ?? '').toString());
+
+    final formKey = GlobalKey<FormState>();
+    bool saving = false;
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: const Text('Edit Need'),
+          content: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: nameCtrl,
+                  decoration: const InputDecoration(labelText: 'Name'),
+                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                ),
+                TextFormField(
+                  controller: priceCtrl,
+                  decoration: const InputDecoration(labelText: 'Price'),
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  validator: (v) {
+                    final n = num.tryParse((v ?? '').trim());
+                    if (n == null || n <= 0) return 'Enter valid price';
+                    return null;
+                  },
+                ),
+                TextFormField(
+                  controller: notesCtrl,
+                  decoration: const InputDecoration(labelText: 'Notes'),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: saving ? null : () => Navigator.pop(ctx), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: saving
+                  ? null
+                  : () async {
+                      if (!(formKey.currentState?.validate() ?? false)) return;
+
+                      setLocal(() => saving = true);
+
+                      try {
+                        final token = await _getAuthToken();
+                        if (token == null || token.isEmpty) return;
+
+                        final res = await http.patch(
+                          Uri.parse('${ApiEndpoints.needs}/$id'),
+                          headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': 'Bearer $token',
+                          },
+                          body: jsonEncode({
+                            'name': nameCtrl.text.trim(),
+                            'price': double.parse(priceCtrl.text.trim()),
+                            'notes': notesCtrl.text.trim(),
+                          }),
+                        );
+
+                        if (!mounted) return;
+
+                        if (res.statusCode == 200) {
+                          Navigator.pop(ctx);
+                          await _loadNeeds();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Need updated')),
+                          );
+                        } else {
+                          final body = jsonDecode(res.body);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(body['message'] ?? 'Update failed')),
+                          );
+                        }
+                      } catch (e) {
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Error: $e')),
+                        );
+                      } finally {
+                        setLocal(() => saving = false);
+                      }
+                    },
+              child: saving
+                  ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    nameCtrl.dispose();
+    priceCtrl.dispose();
+    notesCtrl.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -152,13 +260,19 @@ class _AllNeedsViewState extends State<AllNeedsView> {
                                 children: [
                                   Text(name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
                                   const SizedBox(height: 4),
-                                  Text('\$$price', style: const TextStyle(color: AppColors.textGrey)),
+                                  Text('Rs$price', style: const TextStyle(color: AppColors.textGrey)),
                                 ],
                               ),
                             ),
-                            IconButton(
-                              onPressed: () => _deleteNeed(id),
-                              icon: const Icon(Icons.delete_outline),
+                            PopupMenuButton<String>(
+                              onSelected: (v) {
+                                if (v == 'edit') _openEditNeed(n);
+                                if (v == 'delete') _deleteNeed(id);
+                              },
+                              itemBuilder: (_) => const [
+                                PopupMenuItem(value: 'edit', child: Text('Edit')),
+                                PopupMenuItem(value: 'delete', child: Text('Delete')),
+                              ],
                             ),
                           ],
                         ),
