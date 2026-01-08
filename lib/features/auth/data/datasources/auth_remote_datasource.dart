@@ -3,10 +3,10 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/constants/api_endpoints.dart';
 import '../../../../core/error/failure.dart';
+import '../../../../core/network/token_storage.dart';
 import '../models/user_model.dart';
 
 abstract class AuthRemoteDataSource {
@@ -56,30 +56,24 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
           jsonDecode(response.body) as Map<String, dynamic>;
 
       if (statusCode >= 200 && statusCode < 300) {
-        // ✅ Read token from common keys
-        final String? token = bodyJson['token'] as String? ??
-            bodyJson['accessToken'] as String? ??
-            bodyJson['jwt'] as String?;
+        final String? token = _extractToken(bodyJson);
 
         if (token == null || token.isEmpty) {
           throw Failure('Login success but token missing from response.');
         }
 
-        // ✅ Save token (single source of truth)
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('token', token);
+        // ✅ write token in a consistent way for the whole app
+        await TokenStorage.write(token);
 
         // ignore: avoid_print
-        print('✅ Saved token: $token');
+        print('✅ Saved token (LOGIN): $token');
 
-        // ✅ user may be nested or flat
         final dynamic userDataRaw = bodyJson['user'] ?? bodyJson;
 
         if (userDataRaw is! Map<String, dynamic>) {
           throw Failure('Invalid response format from server (user missing).');
         }
 
-        // ✅ Inject token into the user json so UserModel gets it too
         final userData = <String, dynamic>{
           ...userDataRaw,
           'token': token,
@@ -122,43 +116,67 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
               'name': name,
               'email': email,
               'password': password,
-              'confirmPassword': confirmPassword,
+              'confirmPassword': confirmPassword, // backend ignores (fine)
             }),
           )
           .timeout(const Duration(seconds: 10));
 
-      return _handleResponse(response);
-    } on SocketException {
-      throw Failure('Cannot reach server. Check your internet or backend.');
-    } on TimeoutException {
-      throw Failure('Request timed out. Please try again.');
-    }
-  }
+      final statusCode = response.statusCode;
 
-  UserModel _handleResponse(http.Response response) {
-    final statusCode = response.statusCode;
+      // ignore: avoid_print
+      print('REGISTER status: $statusCode');
+      // ignore: avoid_print
+      print('REGISTER body: ${response.body}');
 
-    try {
       final Map<String, dynamic> bodyJson =
           jsonDecode(response.body) as Map<String, dynamic>;
 
       if (statusCode >= 200 && statusCode < 300) {
-        final dynamic userData = bodyJson['user'] ?? bodyJson;
+        final String? token = _extractToken(bodyJson);
 
-        if (userData is Map<String, dynamic>) {
-          return UserModel.fromJson(userData);
-        } else {
-          throw Failure('Invalid response format from server.');
+        if (token == null || token.isEmpty) {
+          throw Failure('Signup success but token missing from response.');
         }
+
+        // ✅ write token in a consistent way for the whole app
+        await TokenStorage.write(token);
+
+        // ignore: avoid_print
+        print('✅ Saved token (REGISTER): $token');
+
+        final dynamic userDataRaw = bodyJson['user'] ?? bodyJson;
+
+        if (userDataRaw is! Map<String, dynamic>) {
+          throw Failure('Invalid response format from server (user missing).');
+        }
+
+        final userData = <String, dynamic>{
+          ...userDataRaw,
+          'token': token,
+        };
+
+        return UserModel.fromJson(userData);
       } else {
         final message = bodyJson['message']?.toString() ??
             'Unexpected error occurred. Code: $statusCode';
         throw Failure(message, statusCode: statusCode);
       }
+    } on SocketException {
+      throw Failure('Cannot reach server. Check your internet or backend.');
+    } on TimeoutException {
+      throw Failure('Request timed out. Please try again.');
     } on Failure {
       rethrow;
-    } catch (_) {
+    } catch (e) {
+      // ignore: avoid_print
+      print('REGISTER parse error: $e');
       throw Failure('Failed to parse server response.');
     }
+  }
+
+  String? _extractToken(Map<String, dynamic> bodyJson) {
+    return bodyJson['token'] as String? ??
+        bodyJson['accessToken'] as String? ??
+        bodyJson['jwt'] as String?;
   }
 }
