@@ -18,6 +18,14 @@ class _AllWantsViewState extends State<AllWantsView> {
   bool _loading = true;
   List<Map<String, dynamic>> _wants = [];
 
+  final List<_ReminderOption> _options = const [
+    _ReminderOption(label: '1 hour', minutes: 60),
+    _ReminderOption(label: '6 hours', minutes: 360),
+    _ReminderOption(label: '24 hours', minutes: 1440),
+    _ReminderOption(label: '3 days', minutes: 4320),
+    _ReminderOption(label: '1 week', minutes: 10080),
+  ];
+
   Future<String?> _getAuthToken() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString('token') ??
@@ -96,9 +104,7 @@ class _AllWantsViewState extends State<AllWantsView> {
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
   }
 
@@ -143,6 +149,154 @@ class _AllWantsViewState extends State<AllWantsView> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
+  }
+
+  Future<void> _openEditWant(Map<String, dynamic> want) async {
+    final id = (want['_id'] ?? '').toString();
+
+    final nameCtrl = TextEditingController(text: (want['name'] ?? '').toString());
+    final priceCtrl = TextEditingController(
+      text: ((want['price'] as num?)?.toDouble() ?? 0).toStringAsFixed(0),
+    );
+    final notesCtrl = TextEditingController(text: (want['notes'] ?? '').toString());
+
+    int? selectedMinutes; // we’ll save this back using remindAfterMinutes
+
+    final formKey = GlobalKey<FormState>();
+    bool saving = false;
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: const Text('Edit Want'),
+          content: Form(
+            key: formKey,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: nameCtrl,
+                    decoration: const InputDecoration(labelText: 'Name'),
+                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                  ),
+                  TextFormField(
+                    controller: priceCtrl,
+                    decoration: const InputDecoration(labelText: 'Price'),
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    validator: (v) {
+                      final n = num.tryParse((v ?? '').trim());
+                      if (n == null || n <= 0) return 'Enter valid price';
+                      return null;
+                    },
+                  ),
+                  TextFormField(
+                    controller: notesCtrl,
+                    decoration: const InputDecoration(labelText: 'Notes'),
+                  ),
+                  const SizedBox(height: 14),
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Reminder (optional)',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      ChoiceChip(
+                        label: const Text('None'),
+                        selected: selectedMinutes == 0,
+                        onSelected: (_) => setLocal(() => selectedMinutes = 0),
+                      ),
+                      ..._options.map(
+                        (opt) => ChoiceChip(
+                          label: Text(opt.label),
+                          selected: selectedMinutes == opt.minutes,
+                          onSelected: (_) => setLocal(() => selectedMinutes = opt.minutes),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: saving ? null : () => Navigator.pop(ctx), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: saving
+                  ? null
+                  : () async {
+                      if (!(formKey.currentState?.validate() ?? false)) return;
+
+                      setLocal(() => saving = true);
+
+                      try {
+                        final token = await _getAuthToken();
+                        if (token == null || token.isEmpty) return;
+
+                        final body = <String, dynamic>{
+                          'name': nameCtrl.text.trim(),
+                          'price': double.parse(priceCtrl.text.trim()),
+                          'notes': notesCtrl.text.trim(),
+                        };
+
+                        // if user chose None => clear remindAt
+                        if (selectedMinutes == 0) {
+                          body['remindAt'] = null;
+                        } else if (selectedMinutes != null) {
+                          body['remindAfterMinutes'] = selectedMinutes;
+                        }
+
+                        final res = await http.patch(
+                          Uri.parse('${ApiEndpoints.wants}/$id'),
+                          headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': 'Bearer $token',
+                          },
+                          body: jsonEncode(body),
+                        );
+
+                        if (!mounted) return;
+
+                        if (res.statusCode == 200) {
+                          Navigator.pop(ctx);
+                          await _loadWants();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Want updated')),
+                          );
+                        } else {
+                          final resp = jsonDecode(res.body);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(resp['message'] ?? 'Update failed')),
+                          );
+                        }
+                      } catch (e) {
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Error: $e')),
+                        );
+                      } finally {
+                        setLocal(() => saving = false);
+                      }
+                    },
+              child: saving
+                  ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    nameCtrl.dispose();
+    priceCtrl.dispose();
+    notesCtrl.dispose();
   }
 
   Color _statusColor(String status) {
@@ -196,7 +350,7 @@ class _AllWantsViewState extends State<AllWantsView> {
                                 children: [
                                   Text(name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
                                   const SizedBox(height: 4),
-                                  Text('\$$price', style: const TextStyle(color: AppColors.textGrey)),
+                                  Text('Rs$price', style: const TextStyle(color: AppColors.textGrey)),
                                 ],
                               ),
                             ),
@@ -218,13 +372,14 @@ class _AllWantsViewState extends State<AllWantsView> {
                             const SizedBox(width: 8),
                             PopupMenuButton<String>(
                               onSelected: (value) {
-                                if (value == 'delete') {
-                                  _deleteWant(id);
-                                } else {
-                                  _updateStatus(id, value);
-                                }
+                                if (value == 'edit') {
+                                  _openEditWant(w);
+                                } else if (value == 'delete') _deleteWant(id);
+                                else _updateStatus(id, value);
                               },
                               itemBuilder: (_) => const [
+                                PopupMenuItem(value: 'edit', child: Text('Edit')),
+                                PopupMenuDivider(),
                                 PopupMenuItem(value: 'pending', child: Text('Mark Pending')),
                                 PopupMenuItem(value: 'skipped', child: Text('Mark Skipped')),
                                 PopupMenuItem(value: 'purchased', child: Text('Mark Purchased')),
@@ -240,4 +395,10 @@ class _AllWantsViewState extends State<AllWantsView> {
                 ),
     );
   }
+}
+
+class _ReminderOption {
+  final String label;
+  final int minutes;
+  const _ReminderOption({required this.label, required this.minutes});
 }
