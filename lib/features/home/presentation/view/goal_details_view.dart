@@ -276,7 +276,7 @@ class _GoalDetailsViewState extends State<GoalDetailsView> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      '\$${_targetAmount.toStringAsFixed(0)}',
+                      'Rs${_targetAmount.toStringAsFixed(0)}',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
@@ -296,7 +296,7 @@ class _GoalDetailsViewState extends State<GoalDetailsView> {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      "You're \$${_amountAway.toStringAsFixed(0)} away from your goal!",
+                      "You're Rs${_amountAway.toStringAsFixed(0)} away from your goal!",
                       style: const TextStyle(fontSize: 13),
                     ),
                   ],
