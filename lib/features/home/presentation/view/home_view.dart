@@ -1,3 +1,4 @@
+// home_view.dart
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -27,6 +28,8 @@ class _HomeViewState extends State<HomeView> {
   List<Map<String, dynamic>> _wants = [];
   List<Map<String, dynamic>> _needs = [];
 
+  String? _firstName; // ✅ for personalized greeting
+
   @override
   void initState() {
     super.initState();
@@ -40,10 +43,35 @@ class _HomeViewState extends State<HomeView> {
         prefs.getString('accessToken');
   }
 
+  // ✅ Try to get name from SharedPreferences first.
+  // If not found, fallback to parsing it from goal/user payload (if present).
+  Future<void> _loadFirstName() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    // common keys people store after login/register
+    final fullName = (prefs.getString('name') ??
+            prefs.getString('fullName') ??
+            prefs.getString('username') ??
+            prefs.getString('userName') ??
+            prefs.getString('displayName') ??
+            '')
+        .trim();
+
+    if (fullName.isNotEmpty) {
+      final first = fullName.split(RegExp(r'\s+')).first.trim();
+      if (first.isNotEmpty) {
+        _firstName = first;
+        return;
+      }
+    }
+  }
+
   Future<void> _loadHome() async {
     setState(() => _loading = true);
 
     try {
+      await _loadFirstName();
+
       final token = await _getAuthToken();
       if (token == null || token.isEmpty) {
         if (!mounted) return;
@@ -65,6 +93,20 @@ class _HomeViewState extends State<HomeView> {
         goal = jsonDecode(goalRes.body) as Map<String, dynamic>;
       } else {
         goal = null; // 404 = no goal yet
+      }
+
+      // ✅ fallback: try to infer firstName from API payload if available
+      if ((_firstName == null || _firstName!.isEmpty) && goal != null) {
+        final possibleName = (goal['userName'] ??
+                goal['username'] ??
+                goal['name'] ??
+                goal['fullName'] ??
+                '')
+            .toString()
+            .trim();
+        if (possibleName.isNotEmpty) {
+          _firstName = possibleName.split(RegExp(r'\s+')).first.trim();
+        }
       }
 
       // 2) wants
@@ -138,6 +180,7 @@ class _HomeViewState extends State<HomeView> {
 
   double get _goalTarget => (_goal?['targetAmount'] as num?)?.toDouble() ?? 0;
   double get _goalCurrent => (_goal?['currentAmount'] as num?)?.toDouble() ?? 0;
+
   String get _goalName => (_goal?['name']?.toString().trim().isNotEmpty == true)
       ? _goal!['name'].toString()
       : 'Set a goal';
@@ -146,6 +189,11 @@ class _HomeViewState extends State<HomeView> {
     if (_goalTarget <= 0) return 0;
     final p = _goalCurrent / _goalTarget;
     return p.clamp(0, 1);
+  }
+
+  String get _greetingName {
+    final n = (_firstName ?? '').trim();
+    return n.isEmpty ? '' : n;
   }
 
   void _openGoalDetails() {
@@ -175,9 +223,7 @@ class _HomeViewState extends State<HomeView> {
       case 0:
         break;
       case 1:
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Impulse stats coming soon 🔍')),
-        );
+        Navigator.of(context).pushNamed(AppRoutes.stats);
         break;
       case 2:
         Navigator.of(context).pushNamed(AppRoutes.addGoal).then((_) => _loadHome());
@@ -224,12 +270,20 @@ class _HomeViewState extends State<HomeView> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Expanded(
-                            child: Text(
-                              'Hi, Welcome Back',
-                              style: TextStyle(
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
+                          Expanded(
+                            child: RichText(
+                              text: TextSpan(
+                                style: const TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.black,
+                                ),
+                                children: [
+                                  const TextSpan(text: 'Hello'),
+                                  if (_greetingName.isNotEmpty)
+                                    TextSpan(text: ' $_greetingName'),
+                                  const TextSpan(text: ' 👋'),
+                                ],
                               ),
                             ),
                           ),
@@ -237,7 +291,8 @@ class _HomeViewState extends State<HomeView> {
                             onSelected: (value) {
                               switch (value) {
                                 case _ProfileMenuAction.editProfile:
-                                  Navigator.of(context).pushNamed(AppRoutes.profile);
+                                  Navigator.of(context)
+                                      .pushNamed(AppRoutes.profile);
                                   break;
                                 case _ProfileMenuAction.logout:
                                   _logout();
@@ -285,7 +340,7 @@ class _HomeViewState extends State<HomeView> {
                       ),
                       const SizedBox(height: 16),
 
-                      // skipped banner (dynamic)
+                      // ✅ real-time banner (same logic you already had)
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.symmetric(
@@ -309,7 +364,7 @@ class _HomeViewState extends State<HomeView> {
                               child: Text(
                                 _skippedThisWeekCount == 0
                                     ? "No skipped temptations yet this week. You’ve got this 💪"
-                                    : "You’ve skipped $_skippedThisWeekCount temptations this week! That’s \$${_skippedThisWeekTotal.toStringAsFixed(0)} closer to your goal",
+                                    : "You’ve skipped $_skippedThisWeekCount temptations this week! That’s Rs${_skippedThisWeekTotal.toStringAsFixed(0)} closer to your goal",
                                 style: const TextStyle(fontSize: 13),
                               ),
                             ),
@@ -319,12 +374,12 @@ class _HomeViewState extends State<HomeView> {
 
                       const SizedBox(height: 18),
 
-                      // wants / needs add cards
+                      // ✅ Replace buggy tiles with “Add Wants / Add Needs” row (NO zebra overflow)
                       Row(
                         children: [
                           Expanded(
-                            child: _TapCard(
-                              title: 'Wants',
+                            child: _AddRowCard(
+                              label: 'Add Wants',
                               onTap: () {
                                 Navigator.of(context)
                                     .pushNamed(AppRoutes.wants)
@@ -334,8 +389,8 @@ class _HomeViewState extends State<HomeView> {
                           ),
                           const SizedBox(width: 12),
                           Expanded(
-                            child: _TapCard(
-                              title: 'Needs',
+                            child: _AddRowCard(
+                              label: 'Add Needs',
                               onTap: () {
                                 Navigator.of(context)
                                     .pushNamed(AppRoutes.needs)
@@ -348,7 +403,7 @@ class _HomeViewState extends State<HomeView> {
 
                       const SizedBox(height: 18),
 
-                      // goal card (dynamic)
+                      // goal card (unchanged)
                       InkWell(
                         onTap: _openGoalDetails,
                         borderRadius: BorderRadius.circular(24),
@@ -394,7 +449,7 @@ class _HomeViewState extends State<HomeView> {
                               Text(
                                 _goal == null
                                     ? 'Tap to set your goal'
-                                    : '\$${_goalCurrent.toStringAsFixed(0)} of \$${_goalTarget.toStringAsFixed(0)} saved',
+                                    : 'Rs${_goalCurrent.toStringAsFixed(0)} of Rs${_goalTarget.toStringAsFixed(0)} saved',
                                 style: const TextStyle(
                                   fontSize: 12,
                                   color: AppColors.textGrey,
@@ -402,7 +457,7 @@ class _HomeViewState extends State<HomeView> {
                               ),
                               const SizedBox(height: 16),
 
-                              // latest want section (dynamic)
+                              // latest want section (unchanged)
                               Container(
                                 padding: const EdgeInsets.all(12),
                                 decoration: BoxDecoration(
@@ -471,7 +526,7 @@ class _HomeViewState extends State<HomeView> {
                                         Text(
                                           _latestWant == null
                                               ? ''
-                                              : '\$${((_latestWant?['price'] as num?)?.toDouble() ?? 0).toStringAsFixed(0)}',
+                                              : 'Rs${((_latestWant?['price'] as num?)?.toDouble() ?? 0).toStringAsFixed(0)}',
                                           style: const TextStyle(
                                             fontSize: 11,
                                             color: AppColors.textGrey,
@@ -489,7 +544,7 @@ class _HomeViewState extends State<HomeView> {
 
                       const SizedBox(height: 20),
 
-                      // impulse log summary header
+                      // impulse log summary header (unchanged)
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -502,7 +557,6 @@ class _HomeViewState extends State<HomeView> {
                           ),
                           GestureDetector(
                             onTap: () {
-                              // We’ll use AllWants as impulse log list for now
                               Navigator.of(context)
                                   .pushNamed(AppRoutes.allWants)
                                   .then((_) => _loadHome());
@@ -520,7 +574,7 @@ class _HomeViewState extends State<HomeView> {
                       ),
                       const SizedBox(height: 10),
 
-                      // summary card
+                      // summary card (unchanged)
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.symmetric(
@@ -541,7 +595,7 @@ class _HomeViewState extends State<HomeView> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              '\$${_goalCurrent.toStringAsFixed(0)}',
+                              'Rs${_goalCurrent.toStringAsFixed(0)}',
                               style: const TextStyle(
                                 fontSize: 22,
                                 fontWeight: FontWeight.bold,
@@ -605,12 +659,13 @@ class _HomeViewState extends State<HomeView> {
   }
 }
 
-class _TapCard extends StatelessWidget {
-  final String title;
+/// ✅ “Add Wants / Add Needs” card like your 2nd image (safe: no overflow)
+class _AddRowCard extends StatelessWidget {
+  final String label;
   final VoidCallback onTap;
 
-  const _TapCard({
-    required this.title,
+  const _AddRowCard({
+    required this.label,
     required this.onTap,
   });
 
@@ -620,32 +675,37 @@ class _TapCard extends StatelessWidget {
       borderRadius: BorderRadius.circular(24),
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
           color: AppColors.authCard,
           borderRadius: BorderRadius.circular(24),
         ),
-        child: Column(
+        child: Row(
           children: [
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textGrey,
+                ),
               ),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(width: 10),
             Container(
-              height: 40,
-              width: 40,
+              height: 42,
+              width: 42,
               decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(14),
+                color: AppColors.primary.withOpacity(0.12),
+                shape: BoxShape.circle,
               ),
               child: const Icon(
                 Icons.add,
                 color: AppColors.primary,
-                size: 24,
+                size: 22,
               ),
             ),
           ],
