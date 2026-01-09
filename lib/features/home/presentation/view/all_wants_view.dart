@@ -18,7 +18,9 @@ class _AllWantsViewState extends State<AllWantsView> {
   bool _loading = true;
   List<Map<String, dynamic>> _wants = [];
 
+  // ✅ 10 seconds option for testing + normal minute options
   final List<_ReminderOption> _options = const [
+    _ReminderOption(label: '10 seconds (test)', seconds: 10),
     _ReminderOption(label: '1 hour', minutes: 60),
     _ReminderOption(label: '6 hours', minutes: 360),
     _ReminderOption(label: '24 hours', minutes: 1440),
@@ -104,7 +106,8 @@ class _AllWantsViewState extends State<AllWantsView> {
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Error: $e')));
     }
   }
 
@@ -115,8 +118,14 @@ class _AllWantsViewState extends State<AllWantsView> {
         title: const Text('Delete want?'),
         content: const Text('This will permanently delete this want.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
         ],
       ),
     );
@@ -147,20 +156,23 @@ class _AllWantsViewState extends State<AllWantsView> {
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Error: $e')));
     }
   }
 
   Future<void> _openEditWant(Map<String, dynamic> want) async {
     final id = (want['_id'] ?? '').toString();
 
-    final nameCtrl = TextEditingController(text: (want['name'] ?? '').toString());
+    final nameCtrl =
+        TextEditingController(text: (want['name'] ?? '').toString());
     final priceCtrl = TextEditingController(
       text: ((want['price'] as num?)?.toDouble() ?? 0).toStringAsFixed(0),
     );
-    final notesCtrl = TextEditingController(text: (want['notes'] ?? '').toString());
+    final notesCtrl =
+        TextEditingController(text: (want['notes'] ?? '').toString());
 
-    int? selectedMinutes; // we’ll save this back using remindAfterMinutes
+    _ReminderOption? selectedOption; // ✅ supports seconds or minutes
 
     final formKey = GlobalKey<FormState>();
     bool saving = false;
@@ -179,12 +191,14 @@ class _AllWantsViewState extends State<AllWantsView> {
                   TextFormField(
                     controller: nameCtrl,
                     decoration: const InputDecoration(labelText: 'Name'),
-                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                    validator: (v) =>
+                        (v == null || v.trim().isEmpty) ? 'Required' : null,
                   ),
                   TextFormField(
                     controller: priceCtrl,
                     decoration: const InputDecoration(labelText: 'Price'),
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
                     validator: (v) {
                       final n = num.tryParse((v ?? '').trim());
                       if (n == null || n <= 0) return 'Enter valid price';
@@ -210,14 +224,15 @@ class _AllWantsViewState extends State<AllWantsView> {
                     children: [
                       ChoiceChip(
                         label: const Text('None'),
-                        selected: selectedMinutes == 0,
-                        onSelected: (_) => setLocal(() => selectedMinutes = 0),
+                        selected: selectedOption == null,
+                        onSelected: (_) => setLocal(() => selectedOption = null),
                       ),
                       ..._options.map(
                         (opt) => ChoiceChip(
                           label: Text(opt.label),
-                          selected: selectedMinutes == opt.minutes,
-                          onSelected: (_) => setLocal(() => selectedMinutes = opt.minutes),
+                          selected: selectedOption == opt,
+                          onSelected: (_) =>
+                              setLocal(() => selectedOption = opt),
                         ),
                       ),
                     ],
@@ -227,7 +242,10 @@ class _AllWantsViewState extends State<AllWantsView> {
             ),
           ),
           actions: [
-            TextButton(onPressed: saving ? null : () => Navigator.pop(ctx), child: const Text('Cancel')),
+            TextButton(
+              onPressed: saving ? null : () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
             ElevatedButton(
               onPressed: saving
                   ? null
@@ -246,11 +264,18 @@ class _AllWantsViewState extends State<AllWantsView> {
                           'notes': notesCtrl.text.trim(),
                         };
 
-                        // if user chose None => clear remindAt
-                        if (selectedMinutes == 0) {
+                        // ✅ If None -> clear remindAt
+                        if (selectedOption == null) {
                           body['remindAt'] = null;
-                        } else if (selectedMinutes != null) {
-                          body['remindAfterMinutes'] = selectedMinutes;
+                        } else {
+                          // ✅ If selected seconds
+                          if (selectedOption!.seconds != null) {
+                            body['remindAfterSeconds'] = selectedOption!.seconds;
+                          }
+                          // ✅ If selected minutes
+                          if (selectedOption!.minutes != null) {
+                            body['remindAfterMinutes'] = selectedOption!.minutes;
+                          }
                         }
 
                         final res = await http.patch(
@@ -273,7 +298,8 @@ class _AllWantsViewState extends State<AllWantsView> {
                         } else {
                           final resp = jsonDecode(res.body);
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(resp['message'] ?? 'Update failed')),
+                            SnackBar(
+                                content: Text(resp['message'] ?? 'Update failed')),
                           );
                         }
                       } catch (e) {
@@ -286,7 +312,11 @@ class _AllWantsViewState extends State<AllWantsView> {
                       }
                     },
               child: saving
-                  ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                  ? const SizedBox(
+                      height: 18,
+                      width: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
                   : const Text('Save'),
             ),
           ],
@@ -333,7 +363,9 @@ class _AllWantsViewState extends State<AllWantsView> {
                       final w = _wants[index];
                       final id = (w['_id'] ?? '').toString();
                       final name = (w['name'] ?? '').toString();
-                      final price = ((w['price'] as num?)?.toDouble() ?? 0).toStringAsFixed(0);
+                      final price =
+                          ((w['price'] as num?)?.toDouble() ?? 0)
+                              .toStringAsFixed(0);
                       final status = (w['status'] ?? 'pending').toString();
 
                       return Container(
@@ -348,14 +380,25 @@ class _AllWantsViewState extends State<AllWantsView> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                                  Text(
+                                    name,
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
                                   const SizedBox(height: 4),
-                                  Text('Rs$price', style: const TextStyle(color: AppColors.textGrey)),
+                                  Text(
+                                    'Rs$price',
+                                    style: const TextStyle(
+                                        color: AppColors.textGrey),
+                                  ),
                                 ],
                               ),
                             ),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 6),
                               decoration: BoxDecoration(
                                 color: _statusColor(status).withOpacity(0.15),
                                 borderRadius: BorderRadius.circular(14),
@@ -374,15 +417,22 @@ class _AllWantsViewState extends State<AllWantsView> {
                               onSelected: (value) {
                                 if (value == 'edit') {
                                   _openEditWant(w);
-                                } else if (value == 'delete') _deleteWant(id);
-                                else _updateStatus(id, value);
+                                } else if (value == 'delete') {
+                                  _deleteWant(id);
+                                } else {
+                                  _updateStatus(id, value);
+                                }
                               },
                               itemBuilder: (_) => const [
                                 PopupMenuItem(value: 'edit', child: Text('Edit')),
                                 PopupMenuDivider(),
-                                PopupMenuItem(value: 'pending', child: Text('Mark Pending')),
-                                PopupMenuItem(value: 'skipped', child: Text('Mark Skipped')),
-                                PopupMenuItem(value: 'purchased', child: Text('Mark Purchased')),
+                                PopupMenuItem(
+                                    value: 'pending', child: Text('Mark Pending')),
+                                PopupMenuItem(
+                                    value: 'skipped', child: Text('Mark Skipped')),
+                                PopupMenuItem(
+                                    value: 'purchased',
+                                    child: Text('Mark Purchased')),
                                 PopupMenuDivider(),
                                 PopupMenuItem(value: 'delete', child: Text('Delete')),
                               ],
@@ -399,6 +449,15 @@ class _AllWantsViewState extends State<AllWantsView> {
 
 class _ReminderOption {
   final String label;
-  final int minutes;
-  const _ReminderOption({required this.label, required this.minutes});
+  final int? minutes;
+  final int? seconds;
+
+  const _ReminderOption({
+    required this.label,
+    this.minutes,
+    this.seconds,
+  }) : assert(
+          (minutes != null) ^ (seconds != null),
+          'Provide either minutes OR seconds (not both).',
+        );
 }

@@ -7,6 +7,7 @@ import '../../../../core/constants/api_endpoints.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/error/failure.dart';
 import '../../../../core/network/auth_headers.dart';
+import '../../../alerts/alerts_service.dart';
 
 class WantsView extends StatefulWidget {
   const WantsView({super.key});
@@ -22,9 +23,11 @@ class _WantsViewState extends State<WantsView> {
   final _notesController = TextEditingController();
 
   bool _isLoading = false;
-  int? _selectedMinutes;
+
+  _ReminderOption? _selectedOption;
 
   final List<_ReminderOption> _options = const [
+    _ReminderOption(label: '10 seconds (test)', seconds: 10),
     _ReminderOption(label: '1 hour', minutes: 60),
     _ReminderOption(label: '6 hours', minutes: 360),
     _ReminderOption(label: '24 hours', minutes: 1440),
@@ -40,10 +43,40 @@ class _WantsViewState extends State<WantsView> {
     super.dispose();
   }
 
+  String _extractWantIdFromCreateResponse(dynamic decoded) {
+    // Supports multiple common backend shapes:
+    // 1) { _id: "..." }
+    // 2) { want: { _id: "..." } }
+    // 3) { data: { _id: "..." } }
+    if (decoded is Map) {
+      final direct = decoded['_id'];
+      if (direct != null) return direct.toString();
+
+      final wantObj = decoded['want'];
+      if (wantObj is Map && wantObj['_id'] != null) {
+        return wantObj['_id'].toString();
+      }
+
+      final dataObj = decoded['data'];
+      if (dataObj is Map && dataObj['_id'] != null) {
+        return dataObj['_id'].toString();
+      }
+    }
+    return '';
+  }
+
+  Duration _selectedDuration() {
+    // safe fallback: 1 minute
+    final opt = _selectedOption;
+    if (opt == null) return const Duration(minutes: 1);
+    if (opt.seconds != null) return Duration(seconds: opt.seconds!);
+    return Duration(minutes: opt.minutes ?? 1);
+  }
+
   Future<void> _submitWant() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
-    if (_selectedMinutes == null) {
+    if (_selectedOption == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please select a reminder time')),
       );
@@ -53,30 +86,72 @@ class _WantsViewState extends State<WantsView> {
     setState(() => _isLoading = true);
 
     try {
-      // ✅ Always include token + Bearer header
       final headers = await AuthHeaders.json();
+
+      final name = _nameController.text.trim();
+      final price = double.parse(_priceController.text.trim());
+      final notes = _notesController.text.trim();
+
+      final duration = _selectedDuration();
+      final remindAt = DateTime.now().add(duration).toIso8601String();
 
       final response = await http.post(
         Uri.parse('${ApiEndpoints.baseUrl}/api/wants'),
         headers: headers,
         body: jsonEncode({
-          // NOTE: Keep keys exactly what your backend expects.
-          // If your backend uses "name" and "price", this is correct.
-          'name': _nameController.text.trim(),
-          'price': double.parse(_priceController.text.trim()),
-          'notes': _notesController.text.trim(),
-          'remindAt': DateTime.now()
-    .add(Duration(minutes: _selectedMinutes!))
-    .toIso8601String(),
+          'name': name,
+          'price': price,
+          'notes': notes,
+          'remindAt': remindAt,
         }),
       );
 
       if (!mounted) return;
 
       if (response.statusCode == 200 || response.statusCode == 201) {
+        dynamic decoded;
+        try {
+          decoded = jsonDecode(response.body);
+        } catch (_) {
+          decoded = null;
+        }
+
+        final wantId = _extractWantIdFromCreateResponse(decoded);
+
+        // ✅ Log in-app alert that the temptation was created
+        await AlertsService.instance.logAction(
+          title: 'Temptation added ✅',
+          message: 'You logged "$name" (Rs${price.toStringAsFixed(0)}).',
+          wantId: wantId.isEmpty ? null : wantId,
+        );
+
+        if (wantId.isNotEmpty) {
+          await AlertsService.instance.scheduleReminderForWant(
+  wantId: wantId,
+  after: duration,
+  wantName: name,
+  wantPrice: price,
+);
+
+
+          await AlertsService.instance.logAction(
+            title: 'Timer started ⏱️',
+            message: 'Reminder set for ${_selectedOption!.label}.',
+            wantId: wantId,
+          );
+        } else {
+          // If backend didn’t return wantId, we can’t attach actions to notification
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Saved, but could not schedule reminder (missing want id).'),
+            ),
+          );
+        }
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Temptation logged successfully')),
         );
+
         Navigator.of(context).pop();
       } else {
         dynamic data;
@@ -96,13 +171,11 @@ class _WantsViewState extends State<WantsView> {
       }
     } on Failure catch (f) {
       if (!mounted) return;
-
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(f.message)),
       );
     } catch (e) {
       if (!mounted) return;
-
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error: $e')),
       );
@@ -130,10 +203,7 @@ class _WantsViewState extends State<WantsView> {
                 const Center(
                   child: Text(
                     'ADD ITEM',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -150,8 +220,7 @@ class _WantsViewState extends State<WantsView> {
                 const SizedBox(height: 24),
                 Container(
                   width: double.infinity,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
                   decoration: BoxDecoration(
                     color: AppColors.authCard,
                     borderRadius: BorderRadius.circular(24),
@@ -174,8 +243,7 @@ class _WantsViewState extends State<WantsView> {
                         label: 'Price',
                         hint: 'Enter price',
                         controller: _priceController,
-                        keyboardType:
-                            const TextInputType.numberWithOptions(decimal: true),
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
                         validator: (value) {
                           if (value == null || value.trim().isEmpty) {
                             return 'Please enter price';
@@ -199,10 +267,7 @@ class _WantsViewState extends State<WantsView> {
                         alignment: Alignment.centerLeft,
                         child: Text(
                           'Remind me after',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                          ),
+                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -213,18 +278,9 @@ class _WantsViewState extends State<WantsView> {
                           ..._options.map(
                             (opt) => ChoiceChip(
                               label: Text(opt.label),
-                              selected: _selectedMinutes == opt.minutes,
-                              onSelected: (_) {
-                                setState(() => _selectedMinutes = opt.minutes);
-                              },
+                              selected: _selectedOption == opt,
+                              onSelected: (_) => setState(() => _selectedOption = opt),
                             ),
-                          ),
-                          ChoiceChip(
-                            label: const Text('more'),
-                            selected: false,
-                            onSelected: (_) {
-                              // optional: open custom duration picker later
-                            },
                           ),
                         ],
                       ),
@@ -249,16 +305,12 @@ class _WantsViewState extends State<WantsView> {
                             height: 18,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              valueColor:
-                                  AlwaysStoppedAnimation<Color>(Colors.white),
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                             ),
                           )
                         : const Text(
                             'Save & Start Timer',
-                            style: TextStyle(
-                              fontSize: 16,
-                              color: Colors.white,
-                            ),
+                            style: TextStyle(fontSize: 16, color: Colors.white),
                           ),
                   ),
                 ),
@@ -273,10 +325,7 @@ class _WantsViewState extends State<WantsView> {
                         borderRadius: BorderRadius.circular(24),
                       ),
                     ),
-                    child: const Text(
-                      'Cancel',
-                      style: TextStyle(fontSize: 16),
-                    ),
+                    child: const Text('Cancel', style: TextStyle(fontSize: 16)),
                   ),
                 ),
               ],
@@ -290,8 +339,17 @@ class _WantsViewState extends State<WantsView> {
 
 class _ReminderOption {
   final String label;
-  final int minutes;
-  const _ReminderOption({required this.label, required this.minutes});
+  final int? minutes;
+  final int? seconds;
+
+  const _ReminderOption({
+    required this.label,
+    this.minutes,
+    this.seconds,
+  }) : assert(
+          (minutes != null) ^ (seconds != null),
+          'Provide either minutes OR seconds (not both).',
+        );
 }
 
 class _Field extends StatelessWidget {
@@ -316,13 +374,7 @@ class _Field extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
+        Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
         const SizedBox(height: 4),
         TextFormField(
           controller: controller,
@@ -333,8 +385,7 @@ class _Field extends StatelessWidget {
             hintText: hint,
             filled: true,
             fillColor: Colors.white,
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(16),
               borderSide: BorderSide.none,
