@@ -135,7 +135,6 @@ class _StatsViewState extends State<StatsView> {
     return p.clamp(0, 1);
   }
 
-  // A) streak resets when want is marked "purchased"
   int get _impulseFreeStreakDays {
     if (_wants.isEmpty) return 0;
 
@@ -154,7 +153,6 @@ class _StatsViewState extends State<StatsView> {
       return now.difference(lastPurchased).inDays.clamp(0, 9999);
     }
 
-    // If never purchased, streak = days since earliest log
     DateTime? firstLog;
     for (final w in _wants) {
       final dt = _parseDate(w['createdAt']);
@@ -203,7 +201,6 @@ class _StatsViewState extends State<StatsView> {
     return sum;
   }
 
-  // "Saved last 7 days" = skipped temptations total (matches your app logic)
   double get _savedLastWeek => _skippedThisWeekTotal;
 
   int get _level {
@@ -234,9 +231,11 @@ class _StatsViewState extends State<StatsView> {
             .pushNamedAndRemoveUntil(AppRoutes.home, (r) => false);
         break;
       case 1:
-        break; // stats
+        break;
       case 2:
-        Navigator.of(context).pushNamed(AppRoutes.addGoal).then((_) => _loadStats());
+        Navigator.of(context)
+            .pushNamed(AppRoutes.addGoal)
+            .then((_) => _loadStats());
         break;
       case 3:
         ScaffoldMessenger.of(context).showSnackBar(
@@ -247,6 +246,10 @@ class _StatsViewState extends State<StatsView> {
         Navigator.of(context).pushNamed(AppRoutes.profile);
         break;
     }
+  }
+
+  void _openGoalProgress() {
+    Navigator.of(context).pushNamed(AppRoutes.goalProgress);
   }
 
   @override
@@ -296,7 +299,6 @@ class _StatsViewState extends State<StatsView> {
                           ),
                         ),
 
-                      // Total Saved
                       _SoftCard(
                         child: Row(
                           children: [
@@ -328,7 +330,6 @@ class _StatsViewState extends State<StatsView> {
                       ),
                       const SizedBox(height: 12),
 
-                      // Streak
                       _SoftCard(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -357,9 +358,11 @@ class _StatsViewState extends State<StatsView> {
                               borderRadius: BorderRadius.circular(999),
                               child: LinearProgressIndicator(
                                 minHeight: 8,
-                                value: (_impulseFreeStreakDays / 30).clamp(0, 1),
+                                value:
+                                    (_impulseFreeStreakDays / 30).clamp(0, 1),
                                 backgroundColor: Colors.white,
-                                valueColor: const AlwaysStoppedAnimation<Color>(
+                                valueColor:
+                                    const AlwaysStoppedAnimation<Color>(
                                   AppColors.primary,
                                 ),
                               ),
@@ -379,104 +382,113 @@ class _StatsViewState extends State<StatsView> {
                       ),
                       const SizedBox(height: 12),
 
-                      // Big blue card (prototype vibe)
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF163E6B),
+                      // ✅ ONLY CHANGE: clickable dark-blue card
+                      Material(
+                        color: Colors.transparent,
+                        child: InkWell(
                           borderRadius: BorderRadius.circular(22),
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              height: 56,
-                              width: 56,
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.12),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.track_changes_rounded,
-                                color: Colors.white,
-                                size: 28,
-                              ),
+                          onTap: _openGoalProgress,
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF163E6B),
+                              borderRadius: BorderRadius.circular(22),
                             ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    "Savings On Goals",
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w700,
-                                    ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  height: 56,
+                                  width: 56,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.12),
+                                    shape: BoxShape.circle,
                                   ),
-                                  const SizedBox(height: 10),
-                                  Row(
+                                  child: const Icon(
+                                    Icons.track_changes_rounded,
+                                    color: Colors.white,
+                                    size: 28,
+                                  ),
+                                ),
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
-                                      const Icon(Icons.trending_up_rounded,
-                                          color: Colors.white, size: 18),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: Text(
-                                          "Saved last 7 days",
-                                          style: TextStyle(
-                                            color: Colors.white.withOpacity(0.9),
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600,
-                                          ),
+                                      const Text(
+                                        "Savings On Goals",
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w700,
                                         ),
                                       ),
-                                      Text(
-                                        _rs(_savedLastWeek),
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w800,
-                                        ),
+                                      const SizedBox(height: 10),
+                                      Row(
+                                        children: [
+                                          const Icon(Icons.trending_up_rounded,
+                                              color: Colors.white, size: 18),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Text(
+                                              "Saved last 7 days",
+                                              style: TextStyle(
+                                                color: Colors.white
+                                                    .withOpacity(0.9),
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ),
+                                          Text(
+                                            _rs(_savedLastWeek),
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w800,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Row(
+                                        children: [
+                                          const Icon(Icons.shopping_cart_outlined,
+                                              color: Colors.white, size: 18),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Text(
+                                              "Spent on temptations (purchased)",
+                                              style: TextStyle(
+                                                color: Colors.white
+                                                    .withOpacity(0.9),
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ),
+                                          Text(
+                                            "-${_rs(_purchasedThisWeekTotal)}",
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w800,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ],
                                   ),
-                                  const SizedBox(height: 8),
-                                  Row(
-                                    children: [
-                                      const Icon(Icons.shopping_cart_outlined,
-                                          color: Colors.white, size: 18),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: Text(
-                                          "Spent on temptations (purchased)",
-                                          style: TextStyle(
-                                            color: Colors.white.withOpacity(0.9),
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ),
-                                      Text(
-                                        "-${_rs(_purchasedThisWeekTotal)}",
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w800,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
+                                ),
+                              ],
                             ),
-                          ],
+                          ),
                         ),
                       ),
 
                       const SizedBox(height: 12),
 
-                      // Goal progress
                       _SoftCard(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -495,7 +507,8 @@ class _StatsViewState extends State<StatsView> {
                                 minHeight: 8,
                                 value: _goalProgress,
                                 backgroundColor: Colors.white,
-                                valueColor: const AlwaysStoppedAnimation<Color>(
+                                valueColor:
+                                    const AlwaysStoppedAnimation<Color>(
                                   AppColors.primary,
                                 ),
                               ),
@@ -516,7 +529,6 @@ class _StatsViewState extends State<StatsView> {
 
                       const SizedBox(height: 12),
 
-                      // Level card
                       _SoftCard(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -556,7 +568,8 @@ class _StatsViewState extends State<StatsView> {
                               children: [
                                 Expanded(
                                   child: _MiniChip(
-                                    label: "Skipped: ${_rs(_skippedThisWeekTotal)}",
+                                    label:
+                                        "Skipped: ${_rs(_skippedThisWeekTotal)}",
                                     icon: Icons.check_circle_outline,
                                   ),
                                 ),
