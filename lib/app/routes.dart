@@ -22,7 +22,10 @@ import 'package:spendsense_frontend/features/profile/presentation/view/change_pa
 import 'package:spendsense_frontend/features/profile/presentation/view/delete_account_view.dart';
 
 import 'package:spendsense_frontend/features/splash/presentation/view/splash_view.dart';
+import 'package:spendsense_frontend/features/stats/presentation/view/goal_progress_view.dart';
 import 'package:spendsense_frontend/features/stats/presentation/view/stats_view.dart';
+
+import '../features/alerts/presentation/view/alerts_view.dart';
 
 class AppRoutes {
   // core
@@ -41,9 +44,11 @@ class AppRoutes {
   static const String needs = '/needs';
   static const String addGoal = '/add-goal';
   static const String goalDetails = '/goal-details';
+  static const String goalProgress = '/goal-progress';
 
-  // stats
+  // stats + alerts
   static const String stats = '/stats';
+  static const String alerts = '/alerts';
 
   // ✅ view-all routes
   static const String allWants = '/all-wants';
@@ -96,8 +101,16 @@ class AppRoutes {
       case addGoal:
         return MaterialPageRoute(builder: (_) => const AddGoalView());
 
+      // ── Stats ────────────────────────────────────────────────────────────
       case stats:
         return MaterialPageRoute(builder: (_) => const StatsView());
+
+      case goalProgress:
+        return MaterialPageRoute(builder: (_) => const GoalProgressView());
+
+      // ✅ Alerts (NEW)
+      case alerts:
+        return MaterialPageRoute(builder: (_) => const AlertsView());
 
       // ✅ view-all
       case allWants:
