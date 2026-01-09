@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../core/constants/app_colors.dart';
 import '../core/constants/app_strings.dart';
+import '../core/navigation/app_navigator.dart'; // ✅ ADD THIS
 import 'routes.dart';
 
 import '../features/profile/presentation/view_model/profile_view_model.dart';
@@ -20,6 +21,8 @@ class SpendSenseApp extends StatelessWidget {
         return MaterialApp(
           title: AppStrings.appName,
           debugShowCheckedModeBanner: false,
+
+          navigatorKey: appNavigatorKey, // ✅ THIS IS THE MAIN FIX
 
           theme: ThemeData(
             useMaterial3: false,
