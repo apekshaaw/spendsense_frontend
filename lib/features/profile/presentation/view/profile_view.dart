@@ -172,7 +172,7 @@ class _ProfileViewState extends State<ProfileView> {
                           label: 'Help',
                           onTap: () {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Help & support coming soon 💬')),
+                              const SnackBar(content: Text('Help & support')),
                             );
                           },
                         ),
