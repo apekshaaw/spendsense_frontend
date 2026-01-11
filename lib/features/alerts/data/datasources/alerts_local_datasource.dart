@@ -57,8 +57,16 @@ class AlertsLocalDataSource {
     return pending.first;
   }
 
+  /// ✅ Clear everything
   Future<void> clearAll() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_key);
+  }
+
+  /// ✅ Clear only a specific type (Action / Reminder / Progress)
+  Future<void> clearByType(AlertType type) async {
+    final list = await getAll();
+    final filtered = list.where((a) => a.type != type).toList();
+    await saveAll(filtered);
   }
 }

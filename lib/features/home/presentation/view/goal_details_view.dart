@@ -2,6 +2,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // ✅ for input formatters
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -39,6 +40,10 @@ class GoalDetailsView extends StatefulWidget {
 
 class _GoalDetailsViewState extends State<GoalDetailsView> {
   int _amount = 0;
+
+  // ✅ NEW: controller for manual entry
+  late final TextEditingController _amountController;
+
   bool _isSaving = false;
   bool _isLoading = false;
 
@@ -56,7 +61,16 @@ class _GoalDetailsViewState extends State<GoalDetailsView> {
     _targetAmount = widget.targetAmount;
     _currentAmount = widget.currentAmount;
     _notes = widget.notes;
+
+    _amountController = TextEditingController(text: '0');
+
     _fetchGoal(); // get latest data + history from backend
+  }
+
+  @override
+  void dispose() {
+    _amountController.dispose();
+    super.dispose();
   }
 
   double get _progress {
@@ -67,6 +81,41 @@ class _GoalDetailsViewState extends State<GoalDetailsView> {
 
   double get _amountAway =>
       (_targetAmount - _currentAmount).clamp(0, double.infinity);
+
+  void _setAmount(int value) {
+    final safe = value < 0 ? 0 : value;
+    setState(() => _amount = safe);
+
+    // keep text in sync (without cursor-jump issues most of the time)
+    final currentText = _amountController.text;
+    final nextText = safe.toString();
+    if (currentText != nextText) {
+      _amountController.value = TextEditingValue(
+        text: nextText,
+        selection: TextSelection.collapsed(offset: nextText.length),
+      );
+    }
+  }
+
+  void _syncAmountFromText(String text) {
+    final cleaned = text.trim();
+    if (cleaned.isEmpty) {
+      _setAmount(0);
+      return;
+    }
+
+    final parsed = int.tryParse(cleaned);
+    if (parsed == null) {
+      // if user somehow pastes non-number, revert to last known amount
+      _amountController.value = TextEditingValue(
+        text: _amount.toString(),
+        selection: TextSelection.collapsed(offset: _amount.toString().length),
+      );
+      return;
+    }
+
+    _setAmount(parsed);
+  }
 
   Future<void> _fetchGoal() async {
     setState(() => _isLoading = true);
@@ -127,6 +176,9 @@ class _GoalDetailsViewState extends State<GoalDetailsView> {
   }
 
   Future<void> _saveEntry() async {
+    // ✅ sync first (in case user typed but controller didn’t trigger yet)
+    _syncAmountFromText(_amountController.text);
+
     if (_amount == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Set an amount before saving entry.')),
@@ -162,7 +214,6 @@ class _GoalDetailsViewState extends State<GoalDetailsView> {
         body: jsonEncode({
           'amount': _amount,
           'type': 'saved', // this screen logs saved entries
-          // 'note': 'Manual entry', // optional – you can add a note field later
         }),
       );
 
@@ -174,8 +225,11 @@ class _GoalDetailsViewState extends State<GoalDetailsView> {
           _currentAmount =
               (data['currentAmount'] as num?)?.toDouble() ?? _currentAmount;
           _entries = (data['entries'] as List?) ?? _entries;
-          _amount = 0;
         });
+
+        // ✅ reset amount + field
+        _setAmount(0);
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Entry saved successfully')),
         );
@@ -304,47 +358,53 @@ class _GoalDetailsViewState extends State<GoalDetailsView> {
               ),
               const SizedBox(height: 24),
 
-              // Amount selector
+              // Amount selector (editable)
               Center(
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     _RoundIconButton(
                       icon: Icons.remove,
-                      onTap: () {
-                        setState(() {
-                          if (_amount > 0) _amount -= 50;
-                          if (_amount < 0) _amount = 0;
-                        });
-                      },
+                      onTap: () => _setAmount(_amount - 50),
                     ),
+
+                    // ✅ editable amount input
                     Container(
-                      width: 110,
+                      width: 140,
                       margin: const EdgeInsets.symmetric(horizontal: 8),
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 10),
+                        horizontal: 14,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(24),
                         border: Border.all(color: Colors.grey.shade300),
                         color: Colors.white,
                       ),
-                      child: Center(
-                        child: Text(
-                          _amount.toString(),
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                          ),
+                      child: TextField(
+                        controller: _amountController,
+                        keyboardType: TextInputType.number,
+                        textAlign: TextAlign.center,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly, // ✅ only numbers
+                          LengthLimitingTextInputFormatter(9), // optional safety
+                        ],
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
                         ),
+                        decoration: const InputDecoration(
+                          border: InputBorder.none,
+                          hintText: '0',
+                        ),
+                        onChanged: _syncAmountFromText,
+                        onSubmitted: (_) => FocusScope.of(context).unfocus(),
                       ),
                     ),
+
                     _RoundIconButton(
                       icon: Icons.add,
-                      onTap: () {
-                        setState(() {
-                          _amount += 50;
-                        });
-                      },
+                      onTap: () => _setAmount(_amount + 50),
                     ),
                   ],
                 ),
@@ -467,9 +527,7 @@ class _GoalDetailsViewState extends State<GoalDetailsView> {
       floatingActionButton: FloatingActionButton(
         onPressed: () {
           // quick add +50 saved
-          setState(() {
-            _amount += 50;
-          });
+          _setAmount(_amount + 50);
         },
         backgroundColor: theme.primaryColor,
         child: const Icon(Icons.add, size: 28),

@@ -197,7 +197,7 @@ class _HomeViewState extends State<HomeView> {
         Navigator.of(context).pushNamed(AppRoutes.addGoal).then((_) => _loadHome());
         break;
       case 3:
-        Navigator.of(context).pushNamedAndRemoveUntil(AppRoutes.alerts, (r) => false);
+        Navigator.of(context).pushNamed(AppRoutes.alerts);
         break;
       case 4:
         Navigator.of(context).pushNamed(AppRoutes.profile);

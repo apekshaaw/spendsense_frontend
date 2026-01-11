@@ -39,6 +39,35 @@ class _AlertsViewState extends State<AlertsView> {
     });
   }
 
+  Future<void> _confirmClear({
+    required String title,
+    required Future<void> Function() onClear,
+  }) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(title),
+        content: const Text("This cannot be undone."),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+            child: const Text("Clear", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (ok == true) {
+      await onClear();
+      await _load();
+    }
+  }
+
   String _timeAgo(DateTime dt) {
     final diff = DateTime.now().difference(dt);
     if (diff.inMinutes < 1) return 'just now';
@@ -71,12 +100,10 @@ class _AlertsViewState extends State<AlertsView> {
     setState(() => _currentIndex = index);
     switch (index) {
       case 0:
-        Navigator.of(context)
-            .pushNamedAndRemoveUntil(AppRoutes.home, (r) => false);
+        Navigator.of(context).pushNamedAndRemoveUntil(AppRoutes.home, (r) => false);
         break;
       case 1:
-        Navigator.of(context)
-            .pushNamedAndRemoveUntil(AppRoutes.stats, (r) => false);
+        Navigator.of(context).pushNamedAndRemoveUntil(AppRoutes.stats, (r) => false);
         break;
       case 2:
         Navigator.of(context).pushNamed(AppRoutes.addGoal);
@@ -103,11 +130,49 @@ class _AlertsViewState extends State<AlertsView> {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
             children: [
-              const Text(
-                "ALERTS",
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      "ALERTS",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+                    ),
+                  ),
+
+                  // ✅ Clear menu
+                  PopupMenuButton<String>(
+                    icon: const Icon(Icons.more_vert),
+                    onSelected: (value) async {
+                      if (value == 'clear_all') {
+                        await _confirmClear(
+                          title: "Clear all alerts?",
+                          onClear: () => _ds.clearAll(),
+                        );
+                      }
+                      if (value == 'clear_actions') {
+                        await _confirmClear(
+                          title: "Clear action alerts?",
+                          onClear: () => _ds.clearByType(AlertType.action),
+                        );
+                      }
+                      if (value == 'clear_reminders') {
+                        await _confirmClear(
+                          title: "Clear reminder alerts?",
+                          onClear: () => _ds.clearByType(AlertType.reminder),
+                        );
+                      }
+                    },
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(value: 'clear_all', child: Text("Clear all")),
+                      PopupMenuDivider(),
+                      PopupMenuItem(value: 'clear_actions', child: Text("Clear actions only")),
+                      PopupMenuItem(value: 'clear_reminders', child: Text("Clear reminders only")),
+                    ],
+                  ),
+                ],
               ),
+
               const SizedBox(height: 14),
 
               if (_next != null) ...[
@@ -117,8 +182,7 @@ class _AlertsViewState extends State<AlertsView> {
                       const CircleAvatar(
                         radius: 18,
                         backgroundColor: Colors.white,
-                        child: Icon(Icons.schedule_rounded,
-                            color: AppColors.primary),
+                        child: Icon(Icons.schedule_rounded, color: AppColors.primary),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -127,10 +191,7 @@ class _AlertsViewState extends State<AlertsView> {
                           children: [
                             const Text(
                               "Next reminder",
-                              style: TextStyle(
-                                fontWeight: FontWeight.w900,
-                                fontSize: 13,
-                              ),
+                              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
                             ),
                             const SizedBox(height: 2),
                             Text(
@@ -149,8 +210,7 @@ class _AlertsViewState extends State<AlertsView> {
                       if (_next!.scheduledFor != null)
                         Text(
                           "${_next!.scheduledFor!.hour.toString().padLeft(2, '0')}:${_next!.scheduledFor!.minute.toString().padLeft(2, '0')}",
-                          style: const TextStyle(
-                              fontWeight: FontWeight.w900, fontSize: 12),
+                          style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
                         ),
                     ],
                   ),
@@ -170,10 +230,7 @@ class _AlertsViewState extends State<AlertsView> {
                     children: const [
                       Text(
                         "No alerts yet",
-                        style: TextStyle(
-                          fontWeight: FontWeight.w900,
-                          fontSize: 14,
-                        ),
+                        style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14),
                       ),
                       SizedBox(height: 6),
                       Text(
@@ -197,8 +254,7 @@ class _AlertsViewState extends State<AlertsView> {
                           CircleAvatar(
                             radius: 18,
                             backgroundColor: Colors.white,
-                            child: Icon(_icon(a.type),
-                                color: AppColors.primary, size: 20),
+                            child: Icon(_icon(a.type), color: AppColors.primary, size: 20),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
@@ -207,10 +263,7 @@ class _AlertsViewState extends State<AlertsView> {
                               children: [
                                 Text(
                                   a.title,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 13,
-                                  ),
+                                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
