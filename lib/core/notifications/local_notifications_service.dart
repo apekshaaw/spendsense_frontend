@@ -1,8 +1,12 @@
+// lib/core/notifications/local_notifications_service.dart
 import 'dart:convert';
+import 'dart:math';
 
+import 'package:dotlottie_loader/dotlottie_loader.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
+import 'package:lottie/lottie.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest_all.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
@@ -24,13 +28,24 @@ class LocalNotificationsService {
   static const String actionSkipped = 'ACTION_SKIPPED';
   static const String actionPurchased = 'ACTION_PURCHASED';
 
-  // Used to pass popup request from background -> app open
-  static const String _pendingPopupKey = 'pending_reminder_popup_payload';
+  /// Stores UI actions when we can't show dialogs (background isolate)
+  static const String _pendingUiKey = 'pending_ui_popup_payload_v1';
+
+  /// Simple streak keys
+  static const String _streakCountKey = 'streak_count_v1';
+  static const String _streakLastDayKey = 'streak_last_day_v1';
+
+  /// ✅ Your .lottie assets
+  static const String _skipAnimAsset = 'assets/anim/thumbs_up.lottie';
+  static const String _buyAnimAsset = 'assets/anim/sad_tear.lottie';
+
+  static final Random _rng = Random();
+  static int _lastSkipMsgIndex = -1;
+  static int _lastBuyMsgIndex = -1;
 
   static Future<void> init() async {
     tzdata.initializeTimeZones();
 
-    // ✅ Works whether flutter_timezone returns String OR TimezoneInfo
     try {
       final dynamic tzInfo = await FlutterTimezone.getLocalTimezone();
       final String tzName = (tzInfo is String) ? tzInfo : tzInfo.toString();
@@ -53,7 +68,7 @@ class LocalNotificationsService {
 
     await _plugin.initialize(
       initSettings,
-      onDidReceiveNotificationResponse: _onTap, // foreground / main isolate
+      onDidReceiveNotificationResponse: _onTap,
       onDidReceiveBackgroundNotificationResponse: _onTapBackground,
     );
 
@@ -64,17 +79,24 @@ class LocalNotificationsService {
         ?.requestNotificationsPermission();
   }
 
-  /// Call this once after runApp (post-frame) to show popup if user tapped notif while app was closed.
+  /// Call once after runApp (post-frame)
   static Future<void> showPendingPopupIfAny() async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_pendingPopupKey);
+    final raw = prefs.getString(_pendingUiKey);
     if (raw == null || raw.isEmpty) return;
 
-    await prefs.remove(_pendingPopupKey);
+    await prefs.remove(_pendingUiKey);
 
     try {
       final payload = jsonDecode(raw) as Map<String, dynamic>;
-      await _showReminderPopup(payload);
+      final uiType = (payload['uiType'] ?? 'reminder').toString();
+
+      if (uiType == 'result') {
+        final outcome = (payload['outcome'] ?? '').toString();
+        await _showResultPopupFromPayload(outcome, payload);
+      } else {
+        await _showReminderPopup(payload);
+      }
     } catch (_) {}
   }
 
@@ -123,6 +145,7 @@ class LocalNotificationsService {
 
     // ✅ include everything needed for the popup
     final payload = jsonEncode({
+      'uiType': 'reminder',
       'wantId': wantId,
       'alertId': alertId,
       'notificationId': notificationId,
@@ -140,14 +163,11 @@ class LocalNotificationsService {
       tzTime,
       details,
       payload: payload,
-
-      // ✅ avoids exact_alarms_not_permitted
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
     );
   }
 
   /// ✅ If app is OPEN, show the popup automatically when the time hits.
-  /// This does NOT schedule another notification; it only shows UI if app is alive.
   static void scheduleInAppPopup({
     required Duration after,
     required String wantId,
@@ -158,14 +178,14 @@ class LocalNotificationsService {
     required int notificationId,
   }) {
     Future.delayed(after, () async {
-      // app might be closed; if so nothing happens (that’s fine, phone notif will cover)
-      if (WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) return;
+      final state = WidgetsBinding.instance.lifecycleState;
+      if (state != AppLifecycleState.resumed) return;
 
-final ctx = appNavigatorKey.currentState?.overlay?.context;
-if (ctx == null) return;
-
+      final ctx = appNavigatorKey.currentState?.overlay?.context;
+      if (ctx == null) return;
 
       await _showReminderPopup({
+        'uiType': 'reminder',
         'wantId': wantId,
         'alertId': alertId,
         'notificationId': notificationId,
@@ -215,7 +235,9 @@ if (ctx == null) return;
       await ds.updateWantStatus(wantId, status);
 
       await AlertsService.instance.logAction(
-        title: status == 'skipped' ? 'Temptation skipped ✅' : 'Temptation purchased 🛒',
+        title: status == 'skipped'
+            ? 'Temptation skipped ✅'
+            : 'Temptation purchased 🛒',
         message: status == 'skipped'
             ? 'Nice — you chose discipline.'
             : 'It happens — reset and go again.',
@@ -225,14 +247,33 @@ if (ctx == null) return;
       if (alertId.isNotEmpty) {
         await AlertsService.instance.resolveReminder(alertId);
       }
+
+      // Try to show result popup if app is open, otherwise store it
+      final prefs = await SharedPreferences.getInstance();
+
+      final resultPayload = <String, dynamic>{
+        'uiType': 'result',
+        'outcome': status,
+        'wantId': wantId,
+        'alertId': alertId,
+        'notificationId': payload['notificationId'],
+        'name': payload['name'],
+        'price': payload['price'],
+      };
+
+      if (fromBackground) {
+        await prefs.setString(_pendingUiKey, jsonEncode(resultPayload));
+        return;
+      }
+
+      await _showResultPopupFromPayload(status, resultPayload);
       return;
     }
 
-    // ✅ Otherwise: user tapped the notification itself -> show popup
+    // ✅ Otherwise: user tapped the notification itself -> show reminder popup
     if (fromBackground) {
-      // Can't show UI from background isolate — store and show on app start
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_pendingPopupKey, raw);
+      await prefs.setString(_pendingUiKey, raw);
       return;
     }
 
@@ -250,7 +291,9 @@ if (ctx == null) return;
     final wantName = (payload['name'] ?? 'your latest temptation').toString();
 
     final priceRaw = payload['price'];
-    final double price = (priceRaw is num) ? priceRaw.toDouble() : double.tryParse('$priceRaw') ?? 0;
+    final double price = (priceRaw is num)
+        ? priceRaw.toDouble()
+        : double.tryParse('$priceRaw') ?? 0;
 
     final waitedSecondsRaw = payload['waitedSeconds'];
     final waitedSeconds = (waitedSecondsRaw is num)
@@ -280,6 +323,9 @@ if (ctx == null) return;
             alertId: alertId,
             notificationId: notificationId,
             status: 'skipped',
+            wantName: wantName,
+            wantPrice: price,
+            showResultPopup: true,
           );
         },
         onBuy: () async {
@@ -289,10 +335,12 @@ if (ctx == null) return;
             alertId: alertId,
             notificationId: notificationId,
             status: 'purchased',
+            wantName: wantName,
+            wantPrice: price,
+            showResultPopup: true,
           );
         },
         onSnooze: () async {
-          // Snooze = dismiss only, no reschedule
           if (alertId.isNotEmpty) {
             await AlertsService.instance.resolveReminder(alertId);
           }
@@ -303,7 +351,6 @@ if (ctx == null) return;
           );
 
           if (notificationId != null) {
-            // safe: cancels if still scheduled somewhere
             await cancel(notificationId);
           }
 
@@ -318,13 +365,21 @@ if (ctx == null) return;
     required String wantId,
     required String alertId,
     required int? notificationId,
-    required String status,
+    required String status, // 'skipped' | 'purchased'
+    required String wantName,
+    required double wantPrice,
+    required bool showResultPopup,
   }) async {
     final ds = HomeRemoteDataSource();
     await ds.updateWantStatus(wantId, status);
 
+    // streak update
+    final streak = await _updateStreak(status);
+
     await AlertsService.instance.logAction(
-      title: status == 'skipped' ? 'Temptation skipped ✅' : 'Temptation purchased 🛒',
+      title: status == 'skipped'
+          ? 'Temptation skipped ✅'
+          : 'Temptation purchased 🛒',
       message: status == 'skipped'
           ? 'Nice — you chose discipline.'
           : 'It happens — reset and go again.',
@@ -339,8 +394,166 @@ if (ctx == null) return;
       await cancel(notificationId);
     }
 
+    // Close the reminder dialog first
     Navigator.of(context).pop();
+
+    if (!showResultPopup) return;
+
+    final state = WidgetsBinding.instance.lifecycleState;
+    if (state != AppLifecycleState.resumed) return;
+
+    final ctx = appNavigatorKey.currentState?.overlay?.context;
+    if (ctx == null) return;
+
+    await Future.delayed(const Duration(milliseconds: 120));
+
+    await _showResultPopup(
+      ctx,
+      outcome: status,
+      wantName: wantName,
+      wantPrice: wantPrice,
+      streak: streak,
+    );
   }
+
+  // ---------------- STREAK ----------------
+
+  static String _dayKey(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  static Future<int> _updateStreak(String outcome) async {
+    final prefs = await SharedPreferences.getInstance();
+    final today = _dayKey(DateTime.now());
+
+    int count = prefs.getInt(_streakCountKey) ?? 0;
+    final lastDay = prefs.getString(_streakLastDayKey);
+
+    if (outcome == 'purchased') {
+      count = 0;
+      await prefs.setInt(_streakCountKey, count);
+      await prefs.setString(_streakLastDayKey, today);
+      return count;
+    }
+
+    if (lastDay == today) {
+      return count; // already counted today
+    }
+
+    final yesterday = _dayKey(DateTime.now().subtract(const Duration(days: 1)));
+    if (lastDay == yesterday) {
+      count = max(1, count + 1);
+    } else {
+      count = 1;
+    }
+
+    await prefs.setInt(_streakCountKey, count);
+    await prefs.setString(_streakLastDayKey, today);
+    return count;
+  }
+
+  // ---------------- RESULT POPUP (ANIMATED) ----------------
+
+  static Future<void> _showResultPopupFromPayload(
+    String outcome,
+    Map<String, dynamic> payload,
+  ) async {
+    final ctx = appNavigatorKey.currentState?.overlay?.context;
+    if (ctx == null) return;
+
+    final wantName = (payload['name'] ?? 'that temptation').toString();
+    final priceRaw = payload['price'];
+    final double price = (priceRaw is num)
+        ? priceRaw.toDouble()
+        : double.tryParse('$priceRaw') ?? 0;
+
+    final streak = await _updateStreak(outcome);
+
+    await _showResultPopup(
+      ctx,
+      outcome: outcome,
+      wantName: wantName,
+      wantPrice: price,
+      streak: streak,
+    );
+  }
+
+  static Future<void> _showResultPopup(
+    BuildContext context, {
+    required String outcome, // 'skipped' | 'purchased'
+    required String wantName,
+    required double wantPrice,
+    required int streak,
+  }) async {
+    final isSkip = outcome == 'skipped';
+
+    final amountText =
+        wantPrice > 0 ? 'Rs${wantPrice.toStringAsFixed(0)}' : 'some money';
+
+    final messagesSkip = <String>[
+      'Great job! You skipped "$wantName" and saved $amountText.\nStreak: $streak 🔥',
+      'Discipline win ✅ You didn’t buy "$wantName".\nSaved $amountText — Streak: $streak',
+      'Let’s gooo 😄 You stayed in control.\nSaved $amountText • Streak: $streak',
+      'That’s a strong move 💪\nYou skipped "$wantName". Streak is now $streak!',
+      'Big W 🏆 Saved $amountText by skipping.\nKeep it up — Streak: $streak',
+    ];
+
+    final messagesBuy = <String>[
+      'It’s okay — we go again.\nYour streak reset. Tomorrow is a new start 💙',
+      'No worries. Awareness is progress.\nStreak dropped, but you’re still learning.',
+      'Slip-ups happen.\nReset and come back stronger tomorrow 💪',
+      'You bought "$wantName".\nNext time, we pause and breathe. You’ve got this.',
+      'Don’t beat yourself up.\nOne moment doesn’t define you — we go again.',
+    ];
+
+    final msg = _pickMessage(isSkip ? messagesSkip : messagesBuy, isSkip);
+
+    BuildContext? dialogCtx;
+
+    // Show dialog
+    final dialogFuture = showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) {
+        dialogCtx = ctx;
+        return _ResultDialog(
+          title: isSkip ? 'Nice work!' : 'We go again',
+          message: msg,
+          assetPath: isSkip ? _skipAnimAsset : _buyAnimAsset,
+        );
+      },
+    );
+
+    // Auto close after 2.2s ONLY if dialog is still mounted
+    Future.delayed(const Duration(seconds: 7), () {
+      if (dialogCtx != null && dialogCtx!.mounted) {
+        Navigator.of(dialogCtx!).pop();
+      }
+    });
+
+    await dialogFuture;
+  }
+
+  static String _pickMessage(List<String> list, bool isSkip) {
+    if (list.isEmpty) return '';
+
+    int idx = _rng.nextInt(list.length);
+
+    if (isSkip && list.length > 1) {
+      if (idx == _lastSkipMsgIndex) idx = (idx + 1) % list.length;
+      _lastSkipMsgIndex = idx;
+      return list[idx];
+    }
+
+    if (!isSkip && list.length > 1) {
+      if (idx == _lastBuyMsgIndex) idx = (idx + 1) % list.length;
+      _lastBuyMsgIndex = idx;
+      return list[idx];
+    }
+
+    return list[idx];
+  }
+
+  // ---------------- HELPERS ----------------
 
   static String _formatWaited(Duration d) {
     if (d.inSeconds < 60) return '${d.inSeconds} seconds';
@@ -352,7 +565,7 @@ if (ctx == null) return;
   }
 }
 
-// ---------- UI WIDGET (matches your prototype style) ----------
+// ---------- UI WIDGETS ----------
 
 class _ReminderDialog extends StatelessWidget {
   final String wantName;
@@ -450,10 +663,129 @@ class _ReminderDialog extends StatelessWidget {
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
                 ),
-                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+                padding:
+                    const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ResultDialog extends StatelessWidget {
+  final String title;
+  final String message;
+  final String assetPath;
+
+  const _ResultDialog({
+    required this.title,
+    required this.message,
+    required this.assetPath,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 26),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _Anim(assetPath: assetPath),
+            const SizedBox(height: 6),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                height: 1.35,
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text(
+                'OK',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Anim extends StatelessWidget {
+  final String assetPath;
+  const _Anim({required this.assetPath});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDotLottie = assetPath.toLowerCase().endsWith('.lottie');
+
+    if (isDotLottie) {
+      // ✅ Correct way to render .lottie with dotlottie_loader
+      return SizedBox(
+        height: 120,
+        child: DotLottieLoader.fromAsset(
+          assetPath,
+          frameBuilder: (BuildContext ctx, DotLottie? dotlottie) {
+            if (dotlottie == null) {
+              return const Center(
+                child: SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              );
+            }
+
+            return Lottie.memory(
+              dotlottie.animations.values.single,
+              repeat: true,
+              fit: BoxFit.contain,
+              // If your .lottie contains images, this makes them render too:
+              imageProviderFactory: (asset) {
+                final bytes = dotlottie.images[asset.fileName];
+                if (bytes != null) return MemoryImage(bytes);
+                return const AssetImage('assets/images/spendsense_logo_blue.png');
+              },
+              errorBuilder: (_, __, ___) => const Center(
+                child: Icon(Icons.emoji_emotions, size: 64),
+              ),
+            );
+          },
+          errorBuilder: (ctx, e, s) => const Center(
+            child: Icon(Icons.emoji_emotions, size: 64),
+          ),
+        ),
+      );
+    }
+
+    // Normal .json lottie
+    return SizedBox(
+      height: 120,
+      child: Lottie.asset(
+        assetPath,
+        repeat: true,
+        fit: BoxFit.contain,
+        errorBuilder: (_, __, ___) => const Center(
+          child: Icon(Icons.emoji_emotions, size: 64),
         ),
       ),
     );
