@@ -116,8 +116,7 @@ class _ChangePasswordViewState extends State<ChangePasswordView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF6F8FF),
-      body: SafeArea(
+      backgroundColor: const Color(0xFFEAF5FF),      body: SafeArea(
         child: Column(
           children: [
             Container(

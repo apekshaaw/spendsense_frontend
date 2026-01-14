@@ -39,9 +39,7 @@ class _ProfileViewState extends State<ProfileView> {
         Navigator.of(context).pushNamed(AppRoutes.addGoal);
         break;
       case 3:
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Notifications coming soon 🔔')),
-        );
+        Navigator.of(context).pushNamed(AppRoutes.alerts);
         break;
       case 4:
         break;
@@ -70,8 +68,7 @@ class _ProfileViewState extends State<ProfileView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF6F8FF),
-      bottomNavigationBar: SpendSenseBottomNavBar(
+      backgroundColor: const Color(0xFFEAF5FF),    bottomNavigationBar: SpendSenseBottomNavBar(
         currentIndex: _currentIndex,
         onTabSelected: _onNavTap,
       ),
@@ -171,10 +168,9 @@ class _ProfileViewState extends State<ProfileView> {
                           icon: Icons.headset_mic_outlined,
                           label: 'Help',
                           onTap: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Help & support')),
-                            );
-                          },
+  Navigator.of(context).pushNamed(AppRoutes.help);
+},
+
                         ),
                         const SizedBox(height: 16),
                         ProfileOptionTile(

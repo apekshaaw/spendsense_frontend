@@ -15,14 +15,18 @@ import 'package:spendsense_frontend/features/home/presentation/view/wants_view.d
 import 'package:spendsense_frontend/features/home/presentation/view/all_needs_view.dart';
 import 'package:spendsense_frontend/features/home/presentation/view/all_wants_view.dart';
 
-// ✅ NEW
+// ✅ Goal archive
 import 'package:spendsense_frontend/features/home/presentation/view/goal_archive_view.dart';
+import 'package:spendsense_frontend/features/profile/presentation/help_view.dart';
 
+// ✅ Profile
 import 'package:spendsense_frontend/features/profile/presentation/view/edit_profile_view.dart';
 import 'package:spendsense_frontend/features/profile/presentation/view/profile_view.dart';
 import 'package:spendsense_frontend/features/profile/presentation/view/settings_view.dart';
 import 'package:spendsense_frontend/features/profile/presentation/view/change_password_view.dart';
 import 'package:spendsense_frontend/features/profile/presentation/view/delete_account_view.dart';
+
+import 'package:spendsense_frontend/features/profile/presentation/view/terms_view.dart';
 
 import 'package:spendsense_frontend/features/splash/presentation/view/splash_view.dart';
 import 'package:spendsense_frontend/features/stats/presentation/view/goal_progress_view.dart';
@@ -49,25 +53,30 @@ class AppRoutes {
   static const String goalDetails = '/goal-details';
   static const String goalProgress = '/goal-progress';
 
-  // ✅ NEW: goal archive
+  // goal archive
   static const String goalArchive = '/goal-archive';
 
   // stats + alerts
   static const String stats = '/stats';
   static const String alerts = '/alerts';
 
-  // ✅ view-all routes
+  // view-all routes
   static const String allWants = '/all-wants';
   static const String allNeeds = '/all-needs';
 
   // profile
   static const String profile = '/profile';
   static const String editProfile = '/edit-profile';
+  static const String help = '/profile-help';
 
-  // ✅ settings (inside profile feature)
+
+  // settings (inside profile feature)
   static const String settings = '/profile-settings';
   static const String changePassword = '/profile-change-password';
   static const String deleteAccount = '/profile-delete-account';
+
+  // ✅ NEW: Terms & Conditions route
+  static const String terms = '/profile-terms';
 
   static Route<dynamic> onGenerateRoute(RouteSettings settings) {
     switch (settings.name) {
@@ -110,24 +119,6 @@ class AppRoutes {
       case goalArchive:
         return MaterialPageRoute(builder: (_) => const GoalArchiveView());
 
-      // ── Stats ────────────────────────────────────────────────────────────
-      case stats:
-        return MaterialPageRoute(builder: (_) => const StatsView());
-
-      case goalProgress:
-        return MaterialPageRoute(builder: (_) => const GoalProgressView());
-
-      // ✅ Alerts
-      case alerts:
-        return MaterialPageRoute(builder: (_) => const AlertsView());
-
-      // ✅ view-all
-      case allWants:
-        return MaterialPageRoute(builder: (_) => const AllWantsView());
-
-      case allNeeds:
-        return MaterialPageRoute(builder: (_) => const AllNeedsView());
-
       case goalDetails:
         final args = settings.arguments as Map<String, dynamic>?;
 
@@ -150,6 +141,24 @@ class AppRoutes {
           ),
         );
 
+      // ── Stats ────────────────────────────────────────────────────────────
+      case stats:
+        return MaterialPageRoute(builder: (_) => const StatsView());
+
+      case goalProgress:
+        return MaterialPageRoute(builder: (_) => const GoalProgressView());
+
+      // ── Alerts ───────────────────────────────────────────────────────────
+      case alerts:
+        return MaterialPageRoute(builder: (_) => const AlertsView());
+
+      // ── View All ─────────────────────────────────────────────────────────
+      case allWants:
+        return MaterialPageRoute(builder: (_) => const AllWantsView());
+
+      case allNeeds:
+        return MaterialPageRoute(builder: (_) => const AllNeedsView());
+
       // ── Profile ──────────────────────────────────────────────────────────
       case profile:
         return MaterialPageRoute(builder: (_) => const ProfileView());
@@ -166,6 +175,12 @@ class AppRoutes {
 
       case AppRoutes.deleteAccount:
         return MaterialPageRoute(builder: (_) => const DeleteAccountView());
+
+      case AppRoutes.help:
+  return MaterialPageRoute(builder: (_) => const HelpView());
+
+      case AppRoutes.terms:
+        return MaterialPageRoute(builder: (_) => const TermsView());
 
       default:
         return MaterialPageRoute(builder: (_) => const SplashView());

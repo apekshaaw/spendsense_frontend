@@ -138,8 +138,7 @@ class _EditProfileViewState extends State<EditProfileView> {
     }
   },
       child: Scaffold(
-        backgroundColor: const Color(0xFFF6F8FF),
-        body: SafeArea(
+        backgroundColor: Colors.white,        body: SafeArea(
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             child: Column(

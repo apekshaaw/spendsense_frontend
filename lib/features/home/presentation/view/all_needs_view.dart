@@ -224,8 +224,7 @@ class _AllNeedsViewState extends State<AllNeedsView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF6F8FF),
-      appBar: AppBar(
+      backgroundColor: Colors.white,      appBar: AppBar(
         title: const Text('All Needs'),
         backgroundColor: AppColors.primary,
       ),

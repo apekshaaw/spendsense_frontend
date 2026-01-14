@@ -241,9 +241,7 @@ class _StatsViewState extends State<StatsView> {
         Navigator.of(context).pushNamed(AppRoutes.addGoal).then((_) => _loadStats());
         break;
       case 3:
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Notifications coming soon 🔔')),
-        );
+        Navigator.of(context).pushNamed(AppRoutes.alerts);
         break;
       case 4:
         Navigator.of(context).pushNamed(AppRoutes.profile);
@@ -271,8 +269,7 @@ class _StatsViewState extends State<StatsView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF6F8FF),
-      bottomNavigationBar: SpendSenseBottomNavBar(
+      backgroundColor: Colors.white,      bottomNavigationBar: SpendSenseBottomNavBar(
         currentIndex: _currentIndex,
         onTabSelected: _onNavTap,
       ),
@@ -345,7 +342,7 @@ class _StatsViewState extends State<StatsView> {
                                 ),
                                 const Spacer(),
                                 Text(
-                                  "${_impulseFreeStreakDays} days",
+                                  "$_impulseFreeStreakDays days",
                                   style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
                                 ),
                               ],
@@ -522,7 +519,7 @@ class _StatsViewState extends State<StatsView> {
                             ),
                             const SizedBox(height: 10),
                             Text(
-                              "Streak: ${_impulseFreeStreakDays} days",
+                              "Streak: $_impulseFreeStreakDays days",
                               style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
                             ),
                             const SizedBox(height: 4),

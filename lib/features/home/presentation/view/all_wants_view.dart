@@ -343,8 +343,7 @@ class _AllWantsViewState extends State<AllWantsView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF6F8FF),
-      appBar: AppBar(
+      backgroundColor: Colors.white,      appBar: AppBar(
         title: const Text('All Wants'),
         backgroundColor: AppColors.primary,
       ),

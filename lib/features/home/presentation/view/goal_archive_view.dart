@@ -90,8 +90,7 @@ class _GoalArchiveViewState extends State<GoalArchiveView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF6F8FF),
-      body: SafeArea(
+      backgroundColor: Colors.white,      body: SafeArea(
         child: RefreshIndicator(
           onRefresh: _loadHistory,
           child: SingleChildScrollView(

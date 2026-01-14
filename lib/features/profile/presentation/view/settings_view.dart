@@ -7,8 +7,7 @@ class SettingsView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF6F8FF),
-      body: SafeArea(
+      backgroundColor: const Color(0xFFEAF5FF),      body: SafeArea(
         child: Column(
           children: [
             // header
@@ -66,13 +65,10 @@ class SettingsView extends StatelessWidget {
                         ),
                         const Divider(height: 1),
                         _RowItem(
-                          title: 'Terms And Conditions',
-                          onTap: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Terms And Conditions coming soon 📄')),
-                            );
-                          },
-                        ),
+  title: 'Terms And Conditions',
+  onTap: () => Navigator.of(context).pushNamed(AppRoutes.terms),
+),
+
                         const Divider(height: 1),
                         _RowItem(
                           title: 'Delete Account',

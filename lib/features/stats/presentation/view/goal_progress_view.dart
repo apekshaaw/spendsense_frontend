@@ -228,14 +228,100 @@ class _GoalProgressViewState extends State<GoalProgressView> {
     return "Small wins add up. Stay consistent 👊";
   }
 
+  // ✅ UPDATED: Dialog now includes a bar graph
+  void _showSavingVsSpendingInfo() {
+    final saving = _skippedTotalInRange; // skipped wants
+    final spending = _purchasedTotalInRange; // purchased wants
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          title: const Text(
+            "Saving vs Spending",
+            style: TextStyle(fontWeight: FontWeight.w900),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                "In this app:",
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                "• Saving = total price of the wants you SKIPPED.\n"
+                "• Spending = total price of the wants you PURCHASED.\n\n"
+                "Wants only (not Needs), within the selected range (Week / Month / All).",
+                style: TextStyle(color: AppColors.textGrey, height: 1.35),
+              ),
+              const SizedBox(height: 14),
+
+              // ✅ BAR GRAPH
+              SizedBox(
+                height: 160,
+                width: double.infinity,
+                child: _SavingSpendingBarChart(
+                  saving: saving,
+                  spending: spending,
+                  savingLabel: "Saving",
+                  spendingLabel: "Spending",
+                ),
+              ),
+
+              const SizedBox(height: 10),
+
+              // Values row
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF6F8FF),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        "Saving\n${_rs(saving)}",
+                        style: const TextStyle(fontWeight: FontWeight.w900),
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        "Spending\n${_rs(spending)}",
+                        style: const TextStyle(fontWeight: FontWeight.w900),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text(
+                "Close",
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   // ---------------- UI ----------------
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF6F8FF),
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        backgroundColor: const Color(0xFFF6F8FF),
+        backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.black),
@@ -312,7 +398,7 @@ class _GoalProgressViewState extends State<GoalProgressView> {
                       ),
                       const SizedBox(height: 12),
 
-                      // Line chart (REAL-APP LOOK)
+                      // Line chart
                       _SoftCard(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -337,8 +423,6 @@ class _GoalProgressViewState extends State<GoalProgressView> {
                                       painter: _SmoothAreaLineChartPainter(_curvePoints),
                                     ),
                             ),
-
-                            // X axis labels
                             const SizedBox(height: 8),
                             if (_curvePoints.length > 1)
                               _range == ProgressRange.week
@@ -372,7 +456,6 @@ class _GoalProgressViewState extends State<GoalProgressView> {
                                         );
                                       }).toList(),
                                     ),
-
                             const SizedBox(height: 10),
                             const Text(
                               "Every entry you add becomes a point on this graph ✅",
@@ -388,9 +471,27 @@ class _GoalProgressViewState extends State<GoalProgressView> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
-                              "By temptations",
-                              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+                            Row(
+                              children: [
+                                const Expanded(
+                                  child: Text(
+                                    "By temptations",
+                                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+                                  ),
+                                ),
+                                InkWell(
+                                  onTap: _showSavingVsSpendingInfo,
+                                  child: const Text(
+                                    "Saving vs Spending",
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w800,
+                                      color: AppColors.primary,
+                                      decoration: TextDecoration.underline,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                             const SizedBox(height: 12),
                             Row(
@@ -465,7 +566,9 @@ class _GoalProgressViewState extends State<GoalProgressView> {
                                   child: Row(
                                     children: [
                                       Icon(
-                                        isSpent ? Icons.remove_circle_outline : Icons.add_circle_outline,
+                                        isSpent
+                                            ? Icons.remove_circle_outline
+                                            : Icons.add_circle_outline,
                                         color: AppColors.primary,
                                       ),
                                       const SizedBox(width: 10),
@@ -484,7 +587,10 @@ class _GoalProgressViewState extends State<GoalProgressView> {
                                       const SizedBox(width: 10),
                                       Text(
                                         dateText,
-                                        style: const TextStyle(fontSize: 11, color: AppColors.textGrey),
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          color: AppColors.textGrey,
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -614,6 +720,183 @@ class _LegendRow extends StatelessWidget {
   }
 }
 
+// ✅ NEW: Bar chart widget for dialog
+class _SavingSpendingBarChart extends StatelessWidget {
+  final double saving;
+  final double spending;
+  final String savingLabel;
+  final String spendingLabel;
+
+  const _SavingSpendingBarChart({
+    required this.saving,
+    required this.spending,
+    required this.savingLabel,
+    required this.spendingLabel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      painter: _SavingSpendingBarPainter(saving: saving, spending: spending),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(6, 8, 6, 6),
+        child: Column(
+          children: [
+            const SizedBox(height: 6),
+            const Spacer(),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    savingLabel,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.black87,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    spendingLabel,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.black87,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SavingSpendingBarPainter extends CustomPainter {
+  final double saving;
+  final double spending;
+
+  _SavingSpendingBarPainter({required this.saving, required this.spending});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // background grid
+    final gridPaint = Paint()
+      ..color = Colors.black.withOpacity(0.06)
+      ..strokeWidth = 1;
+
+    for (int i = 1; i <= 3; i++) {
+      final y = size.height * (i / 4);
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
+    }
+
+    final maxVal = max(1.0, max(saving, spending));
+
+    // layout
+    final paddingTop = 8.0;
+    final paddingBottom = 28.0; // space for labels
+    final chartHeight = size.height - paddingTop - paddingBottom;
+
+    final barWidth = size.width * 0.22;
+    final gap = size.width * 0.20;
+
+    final leftCenterX = size.width * 0.25;
+    final rightCenterX = leftCenterX + barWidth + gap;
+
+    double barH(double v) => (v / maxVal) * chartHeight;
+
+    final savingH = barH(saving);
+    final spendingH = barH(spending);
+
+    final savingRect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(
+        leftCenterX,
+        paddingTop + (chartHeight - savingH),
+        barWidth,
+        savingH,
+      ),
+      const Radius.circular(14),
+    );
+
+    final spendingRect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(
+        rightCenterX,
+        paddingTop + (chartHeight - spendingH),
+        barWidth,
+        spendingH,
+      ),
+      const Radius.circular(14),
+    );
+
+    // bars
+    final savingPaint = Paint()
+      ..shader = ui.Gradient.linear(
+        Offset(0, paddingTop),
+        Offset(0, paddingTop + chartHeight),
+        [
+          AppColors.primary.withOpacity(0.90),
+          AppColors.primary.withOpacity(0.45),
+        ],
+      );
+
+    final spendingPaint = Paint()
+      ..shader = ui.Gradient.linear(
+        Offset(0, paddingTop),
+        Offset(0, paddingTop + chartHeight),
+        [
+          AppColors.primary.withOpacity(0.35),
+          AppColors.primary.withOpacity(0.18),
+        ],
+      );
+
+    canvas.drawRRect(savingRect, savingPaint);
+    canvas.drawRRect(spendingRect, spendingPaint);
+
+    // value text above bars
+    final tp1 = TextPainter(
+      text: TextSpan(
+        text: "Rs${saving.toStringAsFixed(0)}",
+        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: Colors.black87),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout(maxWidth: size.width);
+
+    final tp2 = TextPainter(
+      text: TextSpan(
+        text: "Rs${spending.toStringAsFixed(0)}",
+        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: Colors.black87),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout(maxWidth: size.width);
+
+    tp1.paint(
+      canvas,
+      Offset(
+        leftCenterX + (barWidth / 2) - (tp1.width / 2),
+        max(paddingTop, paddingTop + (chartHeight - savingH) - 18),
+      ),
+    );
+
+    tp2.paint(
+      canvas,
+      Offset(
+        rightCenterX + (barWidth / 2) - (tp2.width / 2),
+        max(paddingTop, paddingTop + (chartHeight - spendingH) - 18),
+      ),
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _SavingSpendingBarPainter oldDelegate) {
+    return oldDelegate.saving != saving || oldDelegate.spending != spending;
+  }
+}
+
 // --------- Chart painters (smooth + gradient, real-app look) ---------
 
 class _Point {
@@ -634,7 +917,6 @@ class _SmoothAreaLineChartPainter extends CustomPainter {
       ..color = Colors.black.withOpacity(0.06)
       ..strokeWidth = 1;
 
-    // soft grid
     for (int i = 1; i <= 3; i++) {
       final y = size.height * (i / 4);
       canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
@@ -654,7 +936,6 @@ class _SmoothAreaLineChartPainter extends CustomPainter {
 
     final mapped = points.map(mapPoint).toList();
 
-    // Smooth path (quadratic curve through midpoints)
     Path smoothPath(List<Offset> pts) {
       final path = Path()..moveTo(pts.first.dx, pts.first.dy);
 
@@ -665,7 +946,6 @@ class _SmoothAreaLineChartPainter extends CustomPainter {
 
         path.quadraticBezierTo(p1.dx, p1.dy, mid.dx, mid.dy);
 
-        // last segment: finish to last point
         if (i == pts.length - 2) {
           path.quadraticBezierTo(p2.dx, p2.dy, p2.dx, p2.dy);
         }
@@ -675,7 +955,6 @@ class _SmoothAreaLineChartPainter extends CustomPainter {
 
     final linePath = smoothPath(mapped);
 
-    // Area fill path
     final fillPath = Path.from(linePath)
       ..lineTo(size.width, size.height)
       ..lineTo(0, size.height)
@@ -693,7 +972,6 @@ class _SmoothAreaLineChartPainter extends CustomPainter {
 
     canvas.drawPath(fillPath, fillPaint);
 
-    // Stroke line
     final linePaint = Paint()
       ..color = AppColors.primary
       ..strokeWidth = 3.2
@@ -702,7 +980,6 @@ class _SmoothAreaLineChartPainter extends CustomPainter {
 
     canvas.drawPath(linePath, linePaint);
 
-    // Highlight last point
     final last = mapped.last;
     final dotOuter = Paint()..color = AppColors.primary.withOpacity(0.25);
     final dotInner = Paint()..color = AppColors.primary;
@@ -740,7 +1017,6 @@ class _PiePainter extends CustomPainter {
     start += skippedSweep;
     canvas.drawArc(rect, start, purchasedSweep, true, purchasedPaint);
 
-    // donut hole
     final holePaint = Paint()..color = const Color(0xFFF6F8FF);
     canvas.drawCircle(size.center(Offset.zero), size.width * 0.28, holePaint);
   }

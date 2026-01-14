@@ -201,8 +201,7 @@ class _DeleteAccountViewState extends State<DeleteAccountView> {
     final bool busy = _verifying || _deleting;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF6F8FF),
-      body: SafeArea(
+      backgroundColor: const Color(0xFFEAF5FF),      body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.only(bottom: 24),
           child: Column(

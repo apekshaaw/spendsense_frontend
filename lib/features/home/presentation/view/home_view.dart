@@ -30,20 +30,14 @@ class _HomeViewState extends State<HomeView> {
   List<Map<String, dynamic>> _wants = [];
   List<Map<String, dynamic>> _needs = [];
 
-  // ✅ user profile fetched from /api/auth/me
   Map<String, dynamic>? _me;
 
-  // ✅ Goal completion popup control (show once per goal)
   static const String _goalCompleteShownIdKey = 'goal_complete_shown_goal_id_v1';
   static const String _goalCompleteAnim = 'assets/anim/thumbs_up.lottie';
 
-  // ✅ NEW: motivation popup should show once per APP RUN (not every navigation)
   static bool _motivationShownThisAppRun = false;
-
-  // ✅ you said you'll add this asset
   static const String _motivationAnim = 'assets/anim/happy_face.lottie';
 
-  // ✅ Goal Archive route (won’t break compile even if not in AppRoutes yet)
   static const String _goalArchiveRoute = '/goal-archive';
 
   final Random _rng = Random();
@@ -78,7 +72,7 @@ class _HomeViewState extends State<HomeView> {
         return;
       }
 
-      // ✅ 0) profile
+      // 0) profile
       Map<String, dynamic>? me;
       final meRes = await http.get(
         Uri.parse(ApiEndpoints.profile),
@@ -86,8 +80,6 @@ class _HomeViewState extends State<HomeView> {
       );
       if (meRes.statusCode == 200) {
         me = Map<String, dynamic>.from(jsonDecode(meRes.body) as Map);
-      } else {
-        me = null;
       }
 
       // 1) goal
@@ -98,8 +90,6 @@ class _HomeViewState extends State<HomeView> {
       );
       if (goalRes.statusCode == 200) {
         goal = jsonDecode(goalRes.body) as Map<String, dynamic>;
-      } else {
-        goal = null;
       }
 
       // 2) wants
@@ -132,7 +122,7 @@ class _HomeViewState extends State<HomeView> {
         _needs = needsList;
       });
 
-      // ✅ show goal completed popup (your existing logic)
+      // goal completed popup
       final nowCompleted = _isGoalCompleted;
       if (!wasCompleted && nowCompleted) {
         _maybeShowGoalCompletedPopup();
@@ -140,7 +130,7 @@ class _HomeViewState extends State<HomeView> {
         _maybeShowGoalCompletedPopup();
       }
 
-      // ✅ NEW: show motivation popup once per app run (not on navigation back)
+      // motivation popup once per app run
       _maybeShowMotivationPopupOnAppOpen();
     } catch (e) {
       if (!mounted) return;
@@ -184,7 +174,7 @@ class _HomeViewState extends State<HomeView> {
 
   String _rs(num v) => 'Rs${v.toStringAsFixed(0)}';
 
-  // ✅ Date helpers
+  // Date helpers
   DateTime? _parseDate(dynamic v) {
     if (v == null) return null;
     return DateTime.tryParse(v.toString());
@@ -197,15 +187,10 @@ class _HomeViewState extends State<HomeView> {
   }
 
   DateTime? _wantEffectiveDate(Map<String, dynamic> w) {
-    // ✅ use updatedAt first because status changes later
     return _parseDate(w['updatedAt']) ?? _parseDate(w['createdAt']);
   }
 
-  /// ✅ STREAK RULES (exactly as you asked):
-  /// - 0 if user has never skipped anything yet
-  /// - becomes 1 instantly when they skip once (same day)
-  /// - increases daily even with no new actions
-  /// - resets to 0 when any want becomes purchased (needs do NOT affect)
+  /// STREAK RULES
   int get _impulseFreeStreakDays {
     final now = DateTime.now();
 
@@ -230,22 +215,17 @@ class _HomeViewState extends State<HomeView> {
       }
     }
 
-    // If any purchase happened, streak is days since LAST purchased (starts at 0 on purchase day)
     if (lastPurchased != null) {
       return _daysBetweenStart(lastPurchased, now).clamp(0, 9999);
     }
 
-    // No purchases ever:
-    // If user has skipped at least once, streak starts at 1 on the day of first skip.
     if (firstSkipped != null) {
       return (_daysBetweenStart(firstSkipped, now) + 1).clamp(1, 9999);
     }
 
-    // No skips yet => 0
     return 0;
   }
 
-  // ✅ Level based on STREAK DAYS (1..5)
   int get _levelFromStreak {
     final d = _impulseFreeStreakDays;
     if (d >= 30) return 5;
@@ -255,7 +235,6 @@ class _HomeViewState extends State<HomeView> {
     return 1;
   }
 
-  // ✅ motivational banner message (handles completed goals properly)
   String get _motivationLine {
     if (_goal == null || _goalTarget <= 0) {
       return "Set a goal today — your future self will thank you 🙌";
@@ -280,12 +259,7 @@ class _HomeViewState extends State<HomeView> {
   }
 
   void _openGoalDetails() {
-    if (_isGoalCompleted) {
-      Navigator.of(context).pushNamed(AppRoutes.addGoal).then((_) => _loadHome());
-      return;
-    }
-
-    if (_goal == null) {
+    if (_isGoalCompleted || _goal == null) {
       Navigator.of(context).pushNamed(AppRoutes.addGoal).then((_) => _loadHome());
       return;
     }
@@ -326,7 +300,43 @@ class _HomeViewState extends State<HomeView> {
   }
 
   void _logout() {
-    Navigator.of(context).pushNamedAndRemoveUntil(AppRoutes.welcome, (route) => false);
+    Navigator.of(context)
+        .pushNamedAndRemoveUntil(AppRoutes.welcome, (route) => false);
+  }
+
+  // ✅ Goal icon based on goal name
+  IconData _iconForGoalName(String name) {
+    final n = name.toLowerCase();
+
+    if (n.contains('car') || n.contains('bike') || n.contains('scooter')) {
+      return Icons.directions_car_rounded;
+    }
+    if (n.contains('shoe') || n.contains('shoes') || n.contains('sneaker')) {
+      return Icons.directions_run_rounded;
+    }
+    if (n.contains('dress') || n.contains('clothes') || n.contains('jacket')) {
+      return Icons.checkroom_rounded;
+    }
+    if (n.contains('phone') || n.contains('iphone') || n.contains('mobile')) {
+      return Icons.smartphone_rounded;
+    }
+    if (n.contains('laptop') || n.contains('macbook')) {
+      return Icons.laptop_mac_rounded;
+    }
+    if (n.contains('dyson') || n.contains('vacuum') || n.contains('clean')) {
+      return Icons.cleaning_services_rounded;
+    }
+    if (n.contains('travel') || n.contains('trip') || n.contains('vacation')) {
+      return Icons.flight_takeoff_rounded;
+    }
+    if (n.contains('course') || n.contains('study') || n.contains('college')) {
+      return Icons.school_rounded;
+    }
+    if (n.contains('emergency') || n.contains('saving') || n.contains('savings')) {
+      return Icons.savings_rounded;
+    }
+
+    return Icons.flag_rounded;
   }
 
   // ------------------ GOAL COMPLETED POPUP ------------------
@@ -508,8 +518,7 @@ class _HomeViewState extends State<HomeView> {
     final streakDays = _impulseFreeStreakDays;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF6F8FF),
-      bottomNavigationBar: SpendSenseBottomNavBar(
+      backgroundColor: Colors.white,      bottomNavigationBar: SpendSenseBottomNavBar(
         currentIndex: _currentIndex,
         onTabSelected: _onNavTap,
       ),
@@ -551,7 +560,8 @@ class _HomeViewState extends State<HomeView> {
                             onSelected: (value) {
                               switch (value) {
                                 case _ProfileMenuAction.editProfile:
-                                  Navigator.of(context).pushNamed(AppRoutes.profile);
+                                  Navigator.of(context)
+                                      .pushNamed(AppRoutes.profile);
                                   break;
                                 case _ProfileMenuAction.logout:
                                   _logout();
@@ -598,7 +608,6 @@ class _HomeViewState extends State<HomeView> {
                         ],
                       ),
 
-                      // ✅ streak line under Hello
                       const SizedBox(height: 6),
                       Text(
                         "🔥 $streakDays day streak",
@@ -614,7 +623,8 @@ class _HomeViewState extends State<HomeView> {
                       // ------------------ Motivational Banner ------------------
                       Container(
                         width: double.infinity,
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 14),
                         decoration: BoxDecoration(
                           color: AppColors.authCard,
                           borderRadius: BorderRadius.circular(24),
@@ -677,7 +687,8 @@ class _HomeViewState extends State<HomeView> {
                         borderRadius: BorderRadius.circular(24),
                         child: Container(
                           width: double.infinity,
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 18),
                           decoration: BoxDecoration(
                             color: AppColors.authCard,
                             borderRadius: BorderRadius.circular(24),
@@ -686,7 +697,8 @@ class _HomeViewState extends State<HomeView> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
                                 children: [
                                   const Text(
                                     'Saving for',
@@ -704,9 +716,11 @@ class _HomeViewState extends State<HomeView> {
                                       },
                                       style: TextButton.styleFrom(
                                         foregroundColor: AppColors.primary,
-                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 12, vertical: 8),
                                         shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(14),
+                                          borderRadius:
+                                              BorderRadius.circular(14),
                                         ),
                                       ),
                                       child: const Text(
@@ -720,13 +734,16 @@ class _HomeViewState extends State<HomeView> {
                                   else
                                     TextButton(
                                       onPressed: () {
-                                        Navigator.of(context).pushNamed(AppRoutes.goalProgress);
+                                        Navigator.of(context).pushNamed(
+                                            AppRoutes.goalProgress);
                                       },
                                       style: TextButton.styleFrom(
                                         foregroundColor: AppColors.primary,
-                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 12, vertical: 8),
                                         shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(14),
+                                          borderRadius:
+                                              BorderRadius.circular(14),
                                         ),
                                       ),
                                       child: const Text(
@@ -739,6 +756,7 @@ class _HomeViewState extends State<HomeView> {
                                     ),
                                 ],
                               ),
+
                               const SizedBox(height: 4),
                               Text(
                                 _goalName,
@@ -747,17 +765,18 @@ class _HomeViewState extends State<HomeView> {
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
-                              const SizedBox(height: 8),
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(8),
-                                child: LinearProgressIndicator(
-                                  minHeight: 6,
-                                  value: _goalProgress,
-                                  backgroundColor: Colors.white,
-                                  valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
-                                ),
+
+                              // ✅ The moving person ON the SAME progress line
+                              const SizedBox(height: 12),
+                              _MovingPersonProgressLine(
+                                progress: _goalProgress,
+                                goalIcon: _iconForGoalName(_goalName),
+                                // change these if you want
+                                moveDuration: const Duration(milliseconds: 1400),
+                                pauseAfterMove: const Duration(seconds: 6),
                               ),
-                              const SizedBox(height: 6),
+                              const SizedBox(height: 10),
+
                               Text(
                                 _goal == null
                                     ? 'Tap to set your goal'
@@ -767,10 +786,12 @@ class _HomeViewState extends State<HomeView> {
                                   color: AppColors.textGrey,
                                 ),
                               ),
+
                               if (_isGoalCompleted) ...[
                                 const SizedBox(height: 10),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 6),
                                   decoration: BoxDecoration(
                                     color: Colors.white.withOpacity(0.85),
                                     borderRadius: BorderRadius.circular(999),
@@ -785,6 +806,7 @@ class _HomeViewState extends State<HomeView> {
                                   ),
                                 ),
                               ],
+
                               const SizedBox(height: 16),
 
                               Container(
@@ -794,13 +816,16 @@ class _HomeViewState extends State<HomeView> {
                                   borderRadius: BorderRadius.circular(18),
                                 ),
                                 child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
                                   children: [
                                     Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Text(
-                                          _latestWant?['name']?.toString() ?? 'No wants yet',
+                                          _latestWant?['name']?.toString() ??
+                                              'No wants yet',
                                           style: const TextStyle(
                                             fontSize: 15,
                                             fontWeight: FontWeight.w600,
@@ -819,7 +844,8 @@ class _HomeViewState extends State<HomeView> {
                                       ],
                                     ),
                                     Column(
-                                      crossAxisAlignment: CrossAxisAlignment.end,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.end,
                                       children: [
                                         GestureDetector(
                                           onTap: () {
@@ -828,10 +854,12 @@ class _HomeViewState extends State<HomeView> {
                                                 .then((_) => _loadHome());
                                           },
                                           child: Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 12, vertical: 6),
                                             decoration: BoxDecoration(
                                               color: AppColors.authCard,
-                                              borderRadius: BorderRadius.circular(18),
+                                              borderRadius:
+                                                  BorderRadius.circular(18),
                                             ),
                                             child: const Text(
                                               'View Wants',
@@ -846,7 +874,10 @@ class _HomeViewState extends State<HomeView> {
                                         Text(
                                           _latestWant == null
                                               ? ''
-                                              : _rs(((_latestWant?['price'] as num?)?.toDouble() ?? 0)),
+                                              : _rs(((_latestWant?['price']
+                                                          as num?)
+                                                      ?.toDouble() ??
+                                                  0)),
                                           style: const TextStyle(
                                             fontSize: 11,
                                             color: AppColors.textGrey,
@@ -897,7 +928,8 @@ class _HomeViewState extends State<HomeView> {
                       // summary card
                       Container(
                         width: double.infinity,
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 16),
                         decoration: BoxDecoration(
                           color: AppColors.authCard,
                           borderRadius: BorderRadius.circular(24),
@@ -924,11 +956,13 @@ class _HomeViewState extends State<HomeView> {
                             const Divider(),
                             const SizedBox(height: 8),
                             Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              mainAxisAlignment:
+                                  MainAxisAlignment.spaceBetween,
                               children: [
                                 Row(
                                   children: [
-                                    const Icon(Icons.list_alt, size: 18, color: Colors.amber),
+                                    const Icon(Icons.list_alt,
+                                        size: 18, color: Colors.amber),
                                     const SizedBox(width: 6),
                                     Text(
                                       '${_wants.length} wants',
@@ -938,7 +972,8 @@ class _HomeViewState extends State<HomeView> {
                                 ),
                                 Row(
                                   children: [
-                                    const Icon(Icons.shopping_bag_outlined, size: 18),
+                                    const Icon(Icons.shopping_bag_outlined,
+                                        size: 18),
                                     const SizedBox(width: 6),
                                     Text(
                                       '${_needs.length} needs',
@@ -967,7 +1002,7 @@ class _HomeViewState extends State<HomeView> {
                         ),
                       ),
 
-                      // ✅ NEW: Goal Archive link at bottom
+                      // Goal Archive link
                       const SizedBox(height: 18),
                       Center(
                         child: GestureDetector(
@@ -997,6 +1032,205 @@ class _HomeViewState extends State<HomeView> {
     );
   }
 }
+
+class _MovingPersonProgressLine extends StatefulWidget {
+  final double progress; // 0..1
+  final IconData goalIcon;
+
+  final Duration moveDuration;
+  final Duration pauseAfterMove;
+
+  const _MovingPersonProgressLine({
+    required this.progress,
+    required this.goalIcon,
+    this.moveDuration = const Duration(seconds: 2),
+    this.pauseAfterMove = const Duration(seconds: 3),
+  });
+
+  @override
+  State<_MovingPersonProgressLine> createState() =>
+      _MovingPersonProgressLineState();
+}
+
+class _MovingPersonProgressLineState extends State<_MovingPersonProgressLine>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late Animation<double> _anim; // 0..target
+
+  Timer? _loopTimer;
+  double _target = 0;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _controller = AnimationController(vsync: this, duration: widget.moveDuration);
+    _setTargetAndStart(widget.progress);
+  }
+
+  @override
+  void didUpdateWidget(covariant _MovingPersonProgressLine oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if ((oldWidget.progress - widget.progress).abs() > 0.001) {
+      _setTargetAndStart(widget.progress);
+    }
+  }
+
+  void _setTargetAndStart(double p) {
+    _loopTimer?.cancel();
+    _controller.stop();
+    _controller.reset();
+
+    _target = p.clamp(0.0, 1.0);
+
+    _anim = Tween<double>(begin: 0.0, end: _target).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+
+    _playOnceAndLoop();
+  }
+
+  void _playOnceAndLoop() {
+  _loopTimer?.cancel();
+
+  if (!mounted) return;
+
+  if (_target <= 0.0) {
+    setState(() {});
+    return;
+  }
+
+  // Start the first move
+  _controller.forward(from: 0);
+
+  // ✅ Infinite loop: when animation finishes, wait -> restart -> repeat forever
+  _controller.removeStatusListener(_statusListener);
+  _controller.addStatusListener(_statusListener);
+}
+
+void _statusListener(AnimationStatus status) {
+  if (status != AnimationStatus.completed) return;
+  if (!mounted) return;
+
+  _loopTimer?.cancel();
+  _loopTimer = Timer(widget.pauseAfterMove, () {
+    if (!mounted) return;
+    _controller.reset();
+    _controller.forward(from: 0); // statusListener will trigger again on complete
+  });
+}
+
+  @override
+void dispose() {
+  _loopTimer?.cancel();
+  _controller.removeStatusListener(_statusListener);
+  _controller.dispose();
+  super.dispose();
+}
+
+
+  @override
+  Widget build(BuildContext context) {
+    // ✅ Give the whole area height so icons are NOT clipped
+    const double trackHeight = 8;     // bar thickness
+    const double iconSize = 30;       // circle size
+    const double totalHeight = 36;    // stack height (fixes clipping)
+
+    return SizedBox(
+      height: totalHeight,
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, _) {
+          final currentPos = _target <= 0 ? 0.0 : _anim.value;
+
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              final width = constraints.maxWidth;
+
+              // Keep moving icon fully inside (0..1)
+              final usableWidth = (width - iconSize).clamp(0.0, width);
+              final left = usableWidth * currentPos;
+
+              return Stack(
+                clipBehavior: Clip.none,
+                alignment: Alignment.centerLeft,
+                children: [
+                  // ✅ Center the progress bar vertically inside the bigger box
+                  Align(
+                    alignment: Alignment.center,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(999),
+                      child: LinearProgressIndicator(
+                        minHeight: trackHeight,
+                        value: widget.progress.clamp(0.0, 1.0),
+                        backgroundColor: Colors.white,
+                        valueColor: const AlwaysStoppedAnimation<Color>(
+                          AppColors.primary,
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // ✅ Moving person icon (centered on the line)
+                  Positioned(
+                    left: left,
+                    top: (totalHeight - iconSize) / 2,
+                    child: Container(
+                      height: iconSize,
+                      width: iconSize,
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withOpacity(0.14),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.9),
+                          width: 2,
+                        ),
+                      ),
+                      child: const Center(
+                        child: Icon(
+                          Icons.directions_walk_rounded,
+                          size: 18,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // ✅ Goal icon at end (centered on the same line)
+                  Positioned(
+                    right: 0,
+                    top: (totalHeight - iconSize) / 2,
+                    child: Container(
+                      height: iconSize,
+                      width: iconSize,
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withOpacity(0.14),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.9),
+                          width: 2,
+                        ),
+                      ),
+                      child: Center(
+                        child: Icon(
+                          widget.goalIcon,
+                          size: 18,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
 
 class _AddPillCard extends StatelessWidget {
   final String title;
@@ -1066,9 +1300,8 @@ class _Anim extends StatelessWidget {
           assetPath,
           repeat: true,
           fit: BoxFit.contain,
-          errorBuilder: (_, __, ___) => const Center(
-            child: Icon(Icons.emoji_emotions, size: 64),
-          ),
+          errorBuilder: (_, __, ___) =>
+              const Center(child: Icon(Icons.emoji_emotions, size: 64)),
         ),
       );
     }
@@ -1079,7 +1312,8 @@ class _Anim extends StatelessWidget {
         assetPath,
         frameBuilder: (ctx, dotlottie) {
           if (dotlottie == null) {
-            return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+            return const Center(
+                child: CircularProgressIndicator(strokeWidth: 2));
           }
 
           return Lottie.memory(
@@ -1088,9 +1322,8 @@ class _Anim extends StatelessWidget {
             fit: BoxFit.contain,
           );
         },
-        errorBuilder: (_, __, ___) => const Center(
-          child: Icon(Icons.emoji_emotions, size: 64),
-        ),
+        errorBuilder: (_, __, ___) =>
+            const Center(child: Icon(Icons.emoji_emotions, size: 64)),
       ),
     );
   }
