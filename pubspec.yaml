@@ -73,6 +73,7 @@ flutter:
     - assets/images/spendsense_logo_white.png
     - assets/anim/sad_tear.lottie
     - assets/anim/thumbs_up.lottie
+    - assets/anim/happy_face.lottie
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

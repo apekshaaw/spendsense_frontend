@@ -59,7 +59,6 @@ class _StatsViewState extends State<StatsView> {
         return;
       }
 
-      // 1) goal
       Map<String, dynamic>? goal;
       final goalRes = await http.get(
         Uri.parse('${ApiEndpoints.goals}/me'),
@@ -71,7 +70,6 @@ class _StatsViewState extends State<StatsView> {
         goal = null;
       }
 
-      // 2) wants
       final wantsRes = await http.get(
         Uri.parse(ApiEndpoints.wants),
         headers: _headers(token),
@@ -82,7 +80,6 @@ class _StatsViewState extends State<StatsView> {
               .toList()
           : <Map<String, dynamic>>[];
 
-      // 3) needs
       final needsRes = await http.get(
         Uri.parse(ApiEndpoints.needs),
         headers: _headers(token),
@@ -114,6 +111,10 @@ class _StatsViewState extends State<StatsView> {
     return DateTime.tryParse(v.toString());
   }
 
+  DateTime? _wantEffectiveDate(Map<String, dynamic> w) {
+    return _parseDate(w['updatedAt']) ?? _parseDate(w['createdAt']);
+  }
+
   bool _isInLast7Days(DateTime? dt) {
     if (dt == null) return false;
     final now = DateTime.now();
@@ -135,39 +136,39 @@ class _StatsViewState extends State<StatsView> {
     return p.clamp(0, 1);
   }
 
+  // ✅ SAME streak rules as Home
   int get _impulseFreeStreakDays {
     if (_wants.isEmpty) return 0;
 
-    DateTime? lastPurchased;
+    DateTime? lastSkip;
+    DateTime? lastPurchase;
+
     for (final w in _wants) {
-      if ((w['status'] ?? '') != 'purchased') continue;
-      final dt = _parseDate(w['createdAt']);
+      final status = (w['status'] ?? '').toString();
+      final dt = _wantEffectiveDate(w);
       if (dt == null) continue;
-      if (lastPurchased == null || dt.isAfter(lastPurchased)) {
-        lastPurchased = dt;
+
+      if (status == 'skipped') {
+        if (lastSkip == null || dt.isAfter(lastSkip)) lastSkip = dt;
+      } else if (status == 'purchased') {
+        if (lastPurchase == null || dt.isAfter(lastPurchase)) lastPurchase = dt;
       }
     }
 
-    final now = DateTime.now();
-    if (lastPurchased != null) {
-      return now.difference(lastPurchased).inDays.clamp(0, 9999);
-    }
+    if (lastSkip == null) return 0;
+    if (lastPurchase != null && lastPurchase.isAfter(lastSkip)) return 0;
 
-    DateTime? firstLog;
-    for (final w in _wants) {
-      final dt = _parseDate(w['createdAt']);
-      if (dt == null) continue;
-      if (firstLog == null || dt.isBefore(firstLog)) firstLog = dt;
-    }
-    if (firstLog == null) return 0;
-    return now.difference(firstLog).inDays.clamp(0, 9999);
+    final now = DateTime.now();
+    final daysSinceSkip = now.difference(lastSkip).inDays.clamp(0, 9999);
+    return 1 + daysSinceSkip;
   }
 
+  // weekly aggregates
   int get _skippedThisWeekCount {
     int c = 0;
     for (final w in _wants) {
       if ((w['status'] ?? '') != 'skipped') continue;
-      if (_isInLast7Days(_parseDate(w['createdAt']))) c++;
+      if (_isInLast7Days(_wantEffectiveDate(w))) c++;
     }
     return c;
   }
@@ -176,7 +177,7 @@ class _StatsViewState extends State<StatsView> {
     double sum = 0;
     for (final w in _wants) {
       if ((w['status'] ?? '') != 'skipped') continue;
-      if (!_isInLast7Days(_parseDate(w['createdAt']))) continue;
+      if (!_isInLast7Days(_wantEffectiveDate(w))) continue;
       sum += ((w['price'] as num?)?.toDouble() ?? 0);
     }
     return sum;
@@ -186,7 +187,7 @@ class _StatsViewState extends State<StatsView> {
     double sum = 0;
     for (final w in _wants) {
       if ((w['status'] ?? '') != 'purchased') continue;
-      if (!_isInLast7Days(_parseDate(w['createdAt']))) continue;
+      if (!_isInLast7Days(_wantEffectiveDate(w))) continue;
       sum += ((w['price'] as num?)?.toDouble() ?? 0);
     }
     return sum;
@@ -195,7 +196,8 @@ class _StatsViewState extends State<StatsView> {
   double get _needsThisWeekTotal {
     double sum = 0;
     for (final n in _needs) {
-      if (!_isInLast7Days(_parseDate(n['createdAt']))) continue;
+      final dt = _parseDate(n['createdAt']) ?? _parseDate(n['updatedAt']);
+      if (!_isInLast7Days(dt)) continue;
       sum += ((n['price'] as num?)?.toDouble() ?? 0);
     }
     return sum;
@@ -203,21 +205,24 @@ class _StatsViewState extends State<StatsView> {
 
   double get _savedLastWeek => _skippedThisWeekTotal;
 
+  // ✅ Level based on streak days
   int get _level {
-    final s = _skippedThisWeekCount;
-    if (s >= 10) return 5;
-    if (s >= 7) return 4;
-    if (s >= 4) return 3;
-    if (s >= 2) return 2;
+    final d = _impulseFreeStreakDays;
+    if (d >= 30) return 5;
+    if (d >= 14) return 4;
+    if (d >= 7) return 3;
+    if (d >= 3) return 2;
     return 1;
   }
 
   String get _levelMessage {
-    final s = _skippedThisWeekCount;
-    if (s == 0) return "No skips yet this week. Start with one win today 💪";
-    if (s <= 2) return "Nice start. Keep the momentum 🔥";
-    if (s <= 5) return "Discipline is building. Don’t break it 👊";
-    return "You’re locked in. Stay dangerous ✅";
+    final d = _impulseFreeStreakDays;
+    if (d == 0) return "Start today. One skip starts your streak ✅";
+    if (d < 3) return "Nice start. Keep it alive 🔥";
+    if (d < 7) return "You’re building discipline 💪";
+    if (d < 14) return "Strong control. Don’t break it 👊";
+    if (d < 30) return "Elite level. Stay consistent ✅";
+    return "Master tier 🏆";
   }
 
   // ----------------- Navigation -----------------
@@ -233,9 +238,7 @@ class _StatsViewState extends State<StatsView> {
       case 1:
         break;
       case 2:
-        Navigator.of(context)
-            .pushNamed(AppRoutes.addGoal)
-            .then((_) => _loadStats());
+        Navigator.of(context).pushNamed(AppRoutes.addGoal).then((_) => _loadStats());
         break;
       case 3:
         ScaffoldMessenger.of(context).showSnackBar(
@@ -250,6 +253,19 @@ class _StatsViewState extends State<StatsView> {
 
   void _openGoalProgress() {
     Navigator.of(context).pushNamed(AppRoutes.goalProgress);
+  }
+
+  Widget _starsRow(int level) {
+    return Row(
+      children: List.generate(5, (i) {
+        final filled = i < level;
+        return Icon(
+          Icons.star_rounded,
+          size: 20,
+          color: filled ? Colors.amber : Colors.grey.shade300,
+        );
+      }),
+    );
   }
 
   @override
@@ -277,10 +293,7 @@ class _StatsViewState extends State<StatsView> {
                       const Center(
                         child: Text(
                           "YOUR PROGRESS",
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w800,
-                          ),
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -293,10 +306,7 @@ class _StatsViewState extends State<StatsView> {
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(18),
                           ),
-                          child: Text(
-                            _error!,
-                            style: const TextStyle(color: Colors.red),
-                          ),
+                          child: Text(_error!, style: const TextStyle(color: Colors.red)),
                         ),
 
                       _SoftCard(
@@ -305,25 +315,18 @@ class _StatsViewState extends State<StatsView> {
                             const CircleAvatar(
                               radius: 18,
                               backgroundColor: Colors.white,
-                              child: Icon(Icons.savings_rounded,
-                                  color: AppColors.primary),
+                              child: Icon(Icons.savings_rounded, color: AppColors.primary),
                             ),
                             const SizedBox(width: 12),
                             const Expanded(
                               child: Text(
                                 "Total Saved",
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w700,
-                                ),
+                                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
                               ),
                             ),
                             Text(
                               _rs(_goalCurrent),
-                              style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w800,
-                              ),
+                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
                             ),
                           ],
                         ),
@@ -338,18 +341,12 @@ class _StatsViewState extends State<StatsView> {
                               children: [
                                 const Text(
                                   "🔥  Impulse-Free Streak",
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w800,
-                                  ),
+                                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
                                 ),
                                 const Spacer(),
                                 Text(
-                                  "$_impulseFreeStreakDays days",
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w800,
-                                  ),
+                                  "${_impulseFreeStreakDays} days",
+                                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
                                 ),
                               ],
                             ),
@@ -358,31 +355,23 @@ class _StatsViewState extends State<StatsView> {
                               borderRadius: BorderRadius.circular(999),
                               child: LinearProgressIndicator(
                                 minHeight: 8,
-                                value:
-                                    (_impulseFreeStreakDays / 30).clamp(0, 1),
+                                value: (_impulseFreeStreakDays / 30).clamp(0, 1),
                                 backgroundColor: Colors.white,
-                                valueColor:
-                                    const AlwaysStoppedAnimation<Color>(
-                                  AppColors.primary,
-                                ),
+                                valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
                               ),
                             ),
                             const SizedBox(height: 8),
                             Text(
                               _impulseFreeStreakDays == 0
-                                  ? "Start today. One skip = one win."
-                                  : "Protect the streak. Don’t give it back.",
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: AppColors.textGrey,
-                              ),
+                                  ? "Skip one want to start your streak."
+                                  : "Keep it alive. Buying a want resets it to 0.",
+                              style: const TextStyle(fontSize: 12, color: AppColors.textGrey),
                             ),
                           ],
                         ),
                       ),
                       const SizedBox(height: 12),
 
-                      // ✅ ONLY CHANGE: clickable dark-blue card
                       Material(
                         color: Colors.transparent,
                         child: InkWell(
@@ -413,8 +402,7 @@ class _StatsViewState extends State<StatsView> {
                                 const SizedBox(width: 14),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       const Text(
                                         "Savings On Goals",
@@ -434,8 +422,7 @@ class _StatsViewState extends State<StatsView> {
                                             child: Text(
                                               "Saved last 7 days",
                                               style: TextStyle(
-                                                color: Colors.white
-                                                    .withOpacity(0.9),
+                                                color: Colors.white.withOpacity(0.9),
                                                 fontSize: 12,
                                                 fontWeight: FontWeight.w600,
                                               ),
@@ -459,10 +446,9 @@ class _StatsViewState extends State<StatsView> {
                                           const SizedBox(width: 8),
                                           Expanded(
                                             child: Text(
-                                              "Spent on temptations (purchased)",
+                                              "Spent on wants (purchased)",
                                               style: TextStyle(
-                                                color: Colors.white
-                                                    .withOpacity(0.9),
+                                                color: Colors.white.withOpacity(0.9),
                                                 fontSize: 12,
                                                 fontWeight: FontWeight.w600,
                                               ),
@@ -495,10 +481,7 @@ class _StatsViewState extends State<StatsView> {
                           children: [
                             Text(
                               "Goal: $_goalName",
-                              style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w800,
-                              ),
+                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
                             ),
                             const SizedBox(height: 10),
                             ClipRRect(
@@ -507,10 +490,7 @@ class _StatsViewState extends State<StatsView> {
                                 minHeight: 8,
                                 value: _goalProgress,
                                 backgroundColor: Colors.white,
-                                valueColor:
-                                    const AlwaysStoppedAnimation<Color>(
-                                  AppColors.primary,
-                                ),
+                                valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
                               ),
                             ),
                             const SizedBox(height: 8),
@@ -518,10 +498,7 @@ class _StatsViewState extends State<StatsView> {
                               _goal == null
                                   ? "Set a goal to start tracking progress."
                                   : "${_rs(_goalCurrent)} of ${_rs(_goalTarget)} saved",
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: AppColors.textGrey,
-                              ),
+                              style: const TextStyle(fontSize: 12, color: AppColors.textGrey),
                             ),
                           ],
                         ),
@@ -535,41 +512,30 @@ class _StatsViewState extends State<StatsView> {
                           children: [
                             Row(
                               children: [
-                                const Icon(Icons.star_rounded,
-                                    color: Colors.amber, size: 22),
-                                const SizedBox(width: 8),
+                                _starsRow(_level),
+                                const SizedBox(width: 10),
                                 Text(
                                   "Level-$_level",
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w900,
-                                  ),
+                                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900),
                                 ),
                               ],
                             ),
                             const SizedBox(height: 10),
                             Text(
-                              "You’ve skipped $_skippedThisWeekCount temptations this week.",
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                              ),
+                              "Streak: ${_impulseFreeStreakDays} days",
+                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
                             ),
                             const SizedBox(height: 4),
                             Text(
                               _levelMessage,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: AppColors.textGrey,
-                              ),
+                              style: const TextStyle(fontSize: 12, color: AppColors.textGrey),
                             ),
                             const SizedBox(height: 10),
                             Row(
                               children: [
                                 Expanded(
                                   child: _MiniChip(
-                                    label:
-                                        "Skipped: ${_rs(_skippedThisWeekTotal)}",
+                                    label: "Skipped: ${_rs(_skippedThisWeekTotal)}",
                                     icon: Icons.check_circle_outline,
                                   ),
                                 ),
@@ -641,10 +607,7 @@ class _MiniChip extends StatelessWidget {
           Expanded(
             child: Text(
               label,
-              style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-              ),
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
               overflow: TextOverflow.ellipsis,
             ),
           ),

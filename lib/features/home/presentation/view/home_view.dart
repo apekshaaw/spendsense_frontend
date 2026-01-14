@@ -1,7 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
+import 'package:dotlottie_loader/dotlottie_loader.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:lottie/lottie.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../app/routes.dart';
@@ -20,15 +24,29 @@ class HomeView extends StatefulWidget {
 
 class _HomeViewState extends State<HomeView> {
   int _currentIndex = 0;
-
   bool _loading = true;
 
   Map<String, dynamic>? _goal;
   List<Map<String, dynamic>> _wants = [];
   List<Map<String, dynamic>> _needs = [];
 
-  // ✅ NEW: user profile fetched from /api/auth/me
+  // ✅ user profile fetched from /api/auth/me
   Map<String, dynamic>? _me;
+
+  // ✅ Goal completion popup control (show once per goal)
+  static const String _goalCompleteShownIdKey = 'goal_complete_shown_goal_id_v1';
+  static const String _goalCompleteAnim = 'assets/anim/thumbs_up.lottie';
+
+  // ✅ NEW: motivation popup should show once per APP RUN (not every navigation)
+  static bool _motivationShownThisAppRun = false;
+
+  // ✅ you said you'll add this asset
+  static const String _motivationAnim = 'assets/anim/happy_face.lottie';
+
+  // ✅ Goal Archive route (won’t break compile even if not in AppRoutes yet)
+  static const String _goalArchiveRoute = '/goal-archive';
+
+  final Random _rng = Random();
 
   @override
   void initState() {
@@ -60,7 +78,7 @@ class _HomeViewState extends State<HomeView> {
         return;
       }
 
-      // ✅ 0) profile (real name for Hello <name>)
+      // ✅ 0) profile
       Map<String, dynamic>? me;
       final meRes = await http.get(
         Uri.parse(ApiEndpoints.profile),
@@ -74,8 +92,10 @@ class _HomeViewState extends State<HomeView> {
 
       // 1) goal
       Map<String, dynamic>? goal;
-      final goalRes =
-          await http.get(Uri.parse('${ApiEndpoints.goals}/me'), headers: _headers(token));
+      final goalRes = await http.get(
+        Uri.parse('${ApiEndpoints.goals}/me'),
+        headers: _headers(token),
+      );
       if (goalRes.statusCode == 200) {
         goal = jsonDecode(goalRes.body) as Map<String, dynamic>;
       } else {
@@ -101,12 +121,27 @@ class _HomeViewState extends State<HomeView> {
           : <Map<String, dynamic>>[];
 
       if (!mounted) return;
+
+      // capture old completion state BEFORE updating state
+      final wasCompleted = _isGoalCompleted;
+
       setState(() {
         _me = me;
         _goal = goal;
         _wants = wantsList;
         _needs = needsList;
       });
+
+      // ✅ show goal completed popup (your existing logic)
+      final nowCompleted = _isGoalCompleted;
+      if (!wasCompleted && nowCompleted) {
+        _maybeShowGoalCompletedPopup();
+      } else if (nowCompleted) {
+        _maybeShowGoalCompletedPopup();
+      }
+
+      // ✅ NEW: show motivation popup once per app run (not on navigation back)
+      _maybeShowMotivationPopupOnAppOpen();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -141,19 +176,99 @@ class _HomeViewState extends State<HomeView> {
     return p.clamp(0, 1);
   }
 
+  bool get _isGoalCompleted =>
+      _goal != null && _goalTarget > 0 && _goalCurrent >= _goalTarget;
+
+  double get _remaining =>
+      (_goalTarget - _goalCurrent).clamp(0, _goalTarget).toDouble();
+
   String _rs(num v) => 'Rs${v.toStringAsFixed(0)}';
 
-  // ✅ NEW: motivational banner message based on real goal progress
+  // ✅ Date helpers
+  DateTime? _parseDate(dynamic v) {
+    if (v == null) return null;
+    return DateTime.tryParse(v.toString());
+  }
+
+  DateTime _startOfDay(DateTime dt) => DateTime(dt.year, dt.month, dt.day);
+
+  int _daysBetweenStart(DateTime from, DateTime to) {
+    return _startOfDay(to).difference(_startOfDay(from)).inDays;
+  }
+
+  DateTime? _wantEffectiveDate(Map<String, dynamic> w) {
+    // ✅ use updatedAt first because status changes later
+    return _parseDate(w['updatedAt']) ?? _parseDate(w['createdAt']);
+  }
+
+  /// ✅ STREAK RULES (exactly as you asked):
+  /// - 0 if user has never skipped anything yet
+  /// - becomes 1 instantly when they skip once (same day)
+  /// - increases daily even with no new actions
+  /// - resets to 0 when any want becomes purchased (needs do NOT affect)
+  int get _impulseFreeStreakDays {
+    final now = DateTime.now();
+
+    DateTime? lastPurchased;
+    DateTime? firstSkipped;
+
+    for (final w in _wants) {
+      final status = (w['status'] ?? '').toString();
+      final dt = _wantEffectiveDate(w);
+      if (dt == null) continue;
+
+      if (status == 'purchased') {
+        if (lastPurchased == null || dt.isAfter(lastPurchased)) {
+          lastPurchased = dt;
+        }
+      }
+
+      if (status == 'skipped') {
+        if (firstSkipped == null || dt.isBefore(firstSkipped)) {
+          firstSkipped = dt;
+        }
+      }
+    }
+
+    // If any purchase happened, streak is days since LAST purchased (starts at 0 on purchase day)
+    if (lastPurchased != null) {
+      return _daysBetweenStart(lastPurchased, now).clamp(0, 9999);
+    }
+
+    // No purchases ever:
+    // If user has skipped at least once, streak starts at 1 on the day of first skip.
+    if (firstSkipped != null) {
+      return (_daysBetweenStart(firstSkipped, now) + 1).clamp(1, 9999);
+    }
+
+    // No skips yet => 0
+    return 0;
+  }
+
+  // ✅ Level based on STREAK DAYS (1..5)
+  int get _levelFromStreak {
+    final d = _impulseFreeStreakDays;
+    if (d >= 30) return 5;
+    if (d >= 14) return 4;
+    if (d >= 7) return 3;
+    if (d >= 3) return 2;
+    return 1;
+  }
+
+  // ✅ motivational banner message (handles completed goals properly)
   String get _motivationLine {
     if (_goal == null || _goalTarget <= 0) {
       return "Set a goal today — your future self will thank you 🙌";
     }
 
-    final remaining = (_goalTarget - _goalCurrent).clamp(0, _goalTarget);
+    if (_isGoalCompleted) {
+      return "Goal achieved 🎉 You hit $_goalName. Set a new goal and keep the momentum 🔥";
+    }
+
     final pct = (_goalProgress * 100).round();
 
     if (_goalProgress >= 0.95) {
-      return "You’re almost there 🔥 Only ${_rs(remaining)} left to hit your goal!";
+      return "You’re almost there 🔥 Only ${_rs(_remaining)} left to hit your goal!";
     }
     if (_goalProgress >= 0.75) {
       return "Great progress 💪 You’re $pct% there — keep going!";
@@ -165,6 +280,11 @@ class _HomeViewState extends State<HomeView> {
   }
 
   void _openGoalDetails() {
+    if (_isGoalCompleted) {
+      Navigator.of(context).pushNamed(AppRoutes.addGoal).then((_) => _loadHome());
+      return;
+    }
+
     if (_goal == null) {
       Navigator.of(context).pushNamed(AppRoutes.addGoal).then((_) => _loadHome());
       return;
@@ -206,12 +326,187 @@ class _HomeViewState extends State<HomeView> {
   }
 
   void _logout() {
-    Navigator.of(context)
-        .pushNamedAndRemoveUntil(AppRoutes.welcome, (route) => false);
+    Navigator.of(context).pushNamedAndRemoveUntil(AppRoutes.welcome, (route) => false);
   }
+
+  // ------------------ GOAL COMPLETED POPUP ------------------
+
+  Future<void> _maybeShowGoalCompletedPopup() async {
+    if (!_isGoalCompleted) return;
+
+    final goalId = (_goal?['_id'] ?? '').toString();
+    if (goalId.isEmpty) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    final alreadyShownFor = prefs.getString(_goalCompleteShownIdKey);
+
+    if (alreadyShownFor == goalId) return;
+
+    await prefs.setString(_goalCompleteShownIdKey, goalId);
+
+    if (!mounted) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _showGoalCompletedDialog();
+    });
+  }
+
+  void _showGoalCompletedDialog() {
+    bool dismissed = false;
+
+    final messages = <String>[
+      "Massive win 🎉 You completed “$_goalName”.\nNow set a new goal and keep the streak alive 🔥",
+      "Let’s gooo 🚀 You hit your goal “$_goalName”.\nNew level unlocked — time to set the next one 💪",
+      "Goal achieved ✅ You stayed consistent and it worked.\nSet your next goal right now!",
+      "This is what discipline looks like 🏆\nYou reached “$_goalName”. Keep going — don’t stop here.",
+      "You did it 🎯 Goal completed.\nFuture-you is proud. Set a new goal and keep building momentum.",
+    ];
+
+    final msg = messages[_rng.nextInt(messages.length)];
+
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (_) => Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 26),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _Anim(assetPath: _goalCompleteAnim),
+              const SizedBox(height: 6),
+              const Text(
+                "Goal Completed 🎉",
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                msg,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  height: 1.35,
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextButton(
+                onPressed: () {
+                  dismissed = true;
+                  Navigator.of(context).pop();
+                },
+                child: const Text(
+                  'OK',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ).then((_) => dismissed = true);
+
+    Future.delayed(const Duration(seconds: 5), () {
+      if (!mounted) return;
+      if (dismissed) return;
+      final nav = Navigator.of(context, rootNavigator: true);
+      if (nav.canPop()) nav.pop();
+    });
+  }
+
+  // ------------------ MOTIVATION POPUP (ONCE PER APP RUN) ------------------
+
+  void _maybeShowMotivationPopupOnAppOpen() {
+    if (_motivationShownThisAppRun) return;
+    _motivationShownThisAppRun = true;
+
+    if (!mounted) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _showMotivationDialog();
+    });
+  }
+
+  void _showMotivationDialog() {
+    final streak = _impulseFreeStreakDays;
+    final lvl = _levelFromStreak;
+
+    final goalLine = (_goal == null || _goalTarget <= 0)
+        ? "Set a goal today and start stacking wins ✅"
+        : _isGoalCompleted
+            ? "You completed “$_goalName” 🎉 Set your next goal now."
+            : "You’re ${(100 * _goalProgress).round()}% toward “$_goalName”. Only ${_rs(_remaining)} left.";
+
+    final messages = <String>[
+      "🔥 Day $streak.\nNo impulse buys. That’s discipline.\n$goalLine",
+      "You’re on Day $streak ✅\nLevel $lvl energy.\nProtect the streak today.",
+      "Momentum check 💪\nStreak: $streak days.\n$goalLine",
+      "You’re doing great 👊\nStreak Day: $streak\nOne good choice today keeps it alive.",
+      "Stay locked in ✅\n$streak days without buying a want.\n$goalLine",
+    ];
+
+    final msg = messages[_rng.nextInt(messages.length)];
+
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (_) => Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 26),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _Anim(assetPath: _motivationAnim),
+              const SizedBox(height: 6),
+              const Text(
+                "Keep Going 🚀",
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                msg,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  height: 1.35,
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text(
+                  'Let’s go',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ------------------ UI ------------------
 
   @override
   Widget build(BuildContext context) {
+    final streakDays = _impulseFreeStreakDays;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF6F8FF),
       bottomNavigationBar: SpendSenseBottomNavBar(
@@ -302,6 +597,18 @@ class _HomeViewState extends State<HomeView> {
                           ),
                         ],
                       ),
+
+                      // ✅ streak line under Hello
+                      const SizedBox(height: 6),
+                      Text(
+                        "🔥 $streakDays day streak",
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textGrey,
+                        ),
+                      ),
+
                       const SizedBox(height: 16),
 
                       // ------------------ Motivational Banner ------------------
@@ -335,7 +642,7 @@ class _HomeViewState extends State<HomeView> {
 
                       const SizedBox(height: 18),
 
-                      // ------------------ Add Wants / Add Needs (New UI) ------------------
+                      // ------------------ Add Wants / Add Needs ------------------
                       Row(
                         children: [
                           Expanded(
@@ -364,7 +671,7 @@ class _HomeViewState extends State<HomeView> {
 
                       const SizedBox(height: 18),
 
-                      // ------------------ Goal Card (with View Stats button) ------------------
+                      // ------------------ Goal Card ------------------
                       InkWell(
                         onTap: _openGoalDetails,
                         borderRadius: BorderRadius.circular(24),
@@ -378,7 +685,6 @@ class _HomeViewState extends State<HomeView> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // top row inside goal card
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
@@ -389,26 +695,48 @@ class _HomeViewState extends State<HomeView> {
                                       color: AppColors.textGrey,
                                     ),
                                   ),
-                                  TextButton(
-                                    onPressed: () {
-                                      Navigator.of(context).pushNamed(AppRoutes.goalProgress);
-                                    },
-                                    style: TextButton.styleFrom(
-                                      foregroundColor: AppColors.primary,
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 12, vertical: 8),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(14),
+                                  if (_isGoalCompleted)
+                                    TextButton(
+                                      onPressed: () {
+                                        Navigator.of(context)
+                                            .pushNamed(AppRoutes.addGoal)
+                                            .then((_) => _loadHome());
+                                      },
+                                      style: TextButton.styleFrom(
+                                        foregroundColor: AppColors.primary,
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(14),
+                                        ),
+                                      ),
+                                      child: const Text(
+                                        'Set new goal',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                    )
+                                  else
+                                    TextButton(
+                                      onPressed: () {
+                                        Navigator.of(context).pushNamed(AppRoutes.goalProgress);
+                                      },
+                                      style: TextButton.styleFrom(
+                                        foregroundColor: AppColors.primary,
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(14),
+                                        ),
+                                      ),
+                                      child: const Text(
+                                        'View Stats',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                        ),
                                       ),
                                     ),
-                                    child: const Text(
-                                      'View Stats',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ),
                                 ],
                               ),
                               const SizedBox(height: 4),
@@ -426,9 +754,7 @@ class _HomeViewState extends State<HomeView> {
                                   minHeight: 6,
                                   value: _goalProgress,
                                   backgroundColor: Colors.white,
-                                  valueColor: const AlwaysStoppedAnimation<Color>(
-                                    AppColors.primary,
-                                  ),
+                                  valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
                                 ),
                               ),
                               const SizedBox(height: 6),
@@ -441,9 +767,26 @@ class _HomeViewState extends State<HomeView> {
                                   color: AppColors.textGrey,
                                 ),
                               ),
+                              if (_isGoalCompleted) ...[
+                                const SizedBox(height: 10),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.85),
+                                    borderRadius: BorderRadius.circular(999),
+                                  ),
+                                  child: const Text(
+                                    "✅ Goal completed — set the next one!",
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.primary,
+                                    ),
+                                  ),
+                                ),
+                              ],
                               const SizedBox(height: 16),
 
-                              // latest want
                               Container(
                                 padding: const EdgeInsets.all(12),
                                 decoration: BoxDecoration(
@@ -485,10 +828,7 @@ class _HomeViewState extends State<HomeView> {
                                                 .then((_) => _loadHome());
                                           },
                                           child: Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 12,
-                                              vertical: 6,
-                                            ),
+                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                             decoration: BoxDecoration(
                                               color: AppColors.authCard,
                                               borderRadius: BorderRadius.circular(18),
@@ -588,8 +928,7 @@ class _HomeViewState extends State<HomeView> {
                               children: [
                                 Row(
                                   children: [
-                                    const Icon(Icons.list_alt,
-                                        size: 18, color: Colors.amber),
+                                    const Icon(Icons.list_alt, size: 18, color: Colors.amber),
                                     const SizedBox(width: 6),
                                     Text(
                                       '${_wants.length} wants',
@@ -627,6 +966,29 @@ class _HomeViewState extends State<HomeView> {
                           ],
                         ),
                       ),
+
+                      // ✅ NEW: Goal Archive link at bottom
+                      const SizedBox(height: 18),
+                      Center(
+                        child: GestureDetector(
+                          onTap: () {
+                            Navigator.of(context)
+                                .pushNamed(_goalArchiveRoute)
+                                .then((_) => _loadHome());
+                          },
+                          child: const Text(
+                            'Goal Archive',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.primary,
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 30),
                     ],
                   ),
           ),
@@ -683,6 +1045,51 @@ class _AddPillCard extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Anim extends StatelessWidget {
+  final String assetPath;
+  const _Anim({required this.assetPath});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDotLottie = assetPath.toLowerCase().endsWith('.lottie');
+
+    if (!isDotLottie) {
+      return SizedBox(
+        height: 120,
+        child: Lottie.asset(
+          assetPath,
+          repeat: true,
+          fit: BoxFit.contain,
+          errorBuilder: (_, __, ___) => const Center(
+            child: Icon(Icons.emoji_emotions, size: 64),
+          ),
+        ),
+      );
+    }
+
+    return SizedBox(
+      height: 120,
+      child: DotLottieLoader.fromAsset(
+        assetPath,
+        frameBuilder: (ctx, dotlottie) {
+          if (dotlottie == null) {
+            return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+          }
+
+          return Lottie.memory(
+            dotlottie.animations.values.single,
+            repeat: true,
+            fit: BoxFit.contain,
+          );
+        },
+        errorBuilder: (_, __, ___) => const Center(
+          child: Icon(Icons.emoji_emotions, size: 64),
         ),
       ),
     );

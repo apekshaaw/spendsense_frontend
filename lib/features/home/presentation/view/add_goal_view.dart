@@ -32,32 +32,79 @@ class _AddGoalViewState extends State<AddGoalView> {
     super.dispose();
   }
 
+  Future<void> _showGoalCreatedPopup(String goalName) async {
+    if (!mounted) return;
+
+    bool dismissed = false;
+
+    // Auto-close after 5 seconds (if user doesn't tap OK)
+    Future.delayed(const Duration(seconds: 5)).then((_) {
+      if (!mounted) return;
+      if (!dismissed && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop(); // closes dialog
+      }
+    });
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false, // user must tap OK (or wait 5s)
+      builder: (context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          title: const Text("Goal set! 🎉"),
+          content: Text(
+            "Your new goal “$goalName” is ready.\n\nLet’s keep the momentum going 🔥",
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                dismissed = true;
+                Navigator.of(context).pop();
+              },
+              child: const Text("OK"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Future<void> _submitGoal() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
     setState(() => _isLoading = true);
 
     try {
-      // ✅ Always fetch token + attach Bearer header here
       final headers = await AuthHeaders.json();
+
+      final goalName = _nameController.text.trim();
+      final targetAmount = double.parse(_targetController.text.trim());
+      final notes = _notesController.text.trim();
 
       final response = await http.post(
         Uri.parse('${ApiEndpoints.baseUrl}/api/goals'),
         headers: headers,
         body: jsonEncode({
-          'name': _nameController.text.trim(),
-          'targetAmount': double.parse(_targetController.text.trim()),
-          'notes': _notesController.text.trim(),
+          'name': goalName,
+          'targetAmount': targetAmount,
+          'notes': notes,
+
+          // ✅ IMPORTANT:
+          // tells backend: this is a NEW goal, reset currentAmount to 0,
+          // and archive/store previous goal in history.
+          'resetProgress': true,
         }),
       );
 
       if (!mounted) return;
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Goal added successfully')),
-        );
-        Navigator.of(context).pushReplacementNamed(AppRoutes.home);
+        // ✅ 5 seconds popup + OK dismiss
+        await _showGoalCreatedPopup(goalName);
+
+        // ✅ Return to HomeView so Home reloads immediately
+        // HomeView already does: pushNamed(AddGoal).then((_) => _loadHome());
+        Navigator.of(context).pop(true);
       } else {
         dynamic data;
         try {
@@ -81,7 +128,6 @@ class _AddGoalViewState extends State<AddGoalView> {
         SnackBar(content: Text(f.message)),
       );
 
-      // If token missing, send them to login
       if (f.message.toLowerCase().contains('no token')) {
         Navigator.of(context).pushNamedAndRemoveUntil(
           AppRoutes.login,
@@ -151,8 +197,9 @@ class _AddGoalViewState extends State<AddGoalView> {
                         label: 'Goal Target',
                         hint: 'Enter price',
                         controller: _targetController,
-                        keyboardType:
-                            const TextInputType.numberWithOptions(decimal: true),
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
                         validator: (value) {
                           if (value == null || value.trim().isEmpty) {
                             return 'Please enter a target amount';
@@ -192,8 +239,9 @@ class _AddGoalViewState extends State<AddGoalView> {
                             height: 18,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              valueColor:
-                                  AlwaysStoppedAnimation<Color>(Colors.white),
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.white,
+                              ),
                             ),
                           )
                         : const Text(

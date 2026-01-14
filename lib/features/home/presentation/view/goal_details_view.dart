@@ -6,6 +6,7 @@ import 'package:flutter/services.dart'; // ✅ for input formatters
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../../app/routes.dart'; // ✅ needed for OK -> Home navigation
 import '../../../../core/constants/api_endpoints.dart';
 import '../../../../core/constants/app_colors.dart';
 import 'edit_goal_view.dart';
@@ -175,6 +176,55 @@ class _GoalDetailsViewState extends State<GoalDetailsView> {
     }
   }
 
+  // ✅ NEW: Goal achieved popup (OK -> Home)
+  Future<void> _showGoalAchievedPopup() async {
+    if (!mounted) return;
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 18, 18, 14),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.emoji_events, size: 64, color: Colors.amber),
+              const SizedBox(height: 10),
+              const Text(
+                "Goal Achieved! 🎉",
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                "You reached your goal.\nKeep the momentum going — set a new goal and stay consistent 🔥",
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  height: 1.35,
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text("OK"),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (!mounted) return;
+    Navigator.of(context).pushNamedAndRemoveUntil(AppRoutes.home, (r) => false);
+  }
+
   Future<void> _saveEntry() async {
     // ✅ sync first (in case user typed but controller didn’t trigger yet)
     _syncAmountFromText(_amountController.text);
@@ -221,14 +271,25 @@ class _GoalDetailsViewState extends State<GoalDetailsView> {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
+
         setState(() {
           _currentAmount =
               (data['currentAmount'] as num?)?.toDouble() ?? _currentAmount;
+          // ✅ keep target in sync too
+          _targetAmount =
+              (data['targetAmount'] as num?)?.toDouble() ?? _targetAmount;
           _entries = (data['entries'] as List?) ?? _entries;
         });
 
         // ✅ reset amount + field
         _setAmount(0);
+
+        // ✅ NEW: Goal completion check -> popup -> OK -> Home
+        final achieved = _targetAmount > 0 && _currentAmount >= _targetAmount;
+        if (achieved) {
+          await _showGoalAchievedPopup();
+          return;
+        }
 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Entry saved successfully')),
@@ -488,14 +549,12 @@ class _GoalDetailsViewState extends State<GoalDetailsView> {
                                   entry['type']?.toString() == 'saved';
                               final numAmount =
                                   (entry['amount'] as num?) ?? 0;
-                              final amountText =
-                                  numAmount.toStringAsFixed(0);
+                              final amountText = numAmount.toStringAsFixed(0);
 
                               DateTime? created;
                               if (entry['createdAt'] != null) {
                                 try {
-                                  created =
-                                      DateTime.parse(entry['createdAt']);
+                                  created = DateTime.parse(entry['createdAt']);
                                 } catch (_) {}
                               }
                               final title = created != null
@@ -611,8 +670,7 @@ class _HistoryTile extends StatelessWidget {
             ),
           ),
           Text(
-            (positive ? '+' : '-') +
-                amountText.replaceAll(RegExp(r'[+\-]'), ''),
+            (positive ? '+' : '-') + amountText.replaceAll(RegExp(r'[+\-]'), ''),
             style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w600,
