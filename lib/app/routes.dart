@@ -17,7 +17,7 @@ import 'package:spendsense_frontend/features/home/presentation/view/all_wants_vi
 
 // ✅ Goal archive
 import 'package:spendsense_frontend/features/home/presentation/view/goal_archive_view.dart';
-import 'package:spendsense_frontend/features/profile/presentation/help_view.dart';
+import 'package:spendsense_frontend/features/profile/presentation/view/help_view.dart';
 
 // ✅ Profile
 import 'package:spendsense_frontend/features/profile/presentation/view/edit_profile_view.dart';
