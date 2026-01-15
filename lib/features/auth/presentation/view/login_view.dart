@@ -32,6 +32,8 @@ class _LoginFormState extends State<_LoginForm> {
 
   final _formKey = GlobalKey<FormState>();
 
+  bool _obscurePassword = true;
+
   @override
   void dispose() {
     _emailController.dispose();
@@ -65,7 +67,6 @@ class _LoginFormState extends State<_LoginForm> {
             }
 
             if (state.status == LoginStatus.success) {
-              // ✅ By the time we’re here, token is already saved in SharedPreferences
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Login successful')),
               );
@@ -79,14 +80,15 @@ class _LoginFormState extends State<_LoginForm> {
             final isLoading = state.status == LoginStatus.loading;
 
             return SingleChildScrollView(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
               child: Form(
                 key: _formKey,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    const SizedBox(height: 16),
+                    // ✅ push headings slightly lower (similar feel to signup)
+                    const SizedBox(height: 28),
+
                     const Text(
                       'WELCOME',
                       style: TextStyle(
@@ -103,16 +105,25 @@ class _LoginFormState extends State<_LoginForm> {
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    const SizedBox(height: 24),
+
+                    // ✅ more breathing room before logo
+                    const SizedBox(height: 22),
+
+                    // ✅ bigger logo (but still safe for small screens)
                     Image.asset(
                       'assets/images/spendsense_logo_blue.png',
-                      height: 70,
+                      height: 95,
                     ),
-                    const SizedBox(height: 24),
+
+                    // ✅ space between logo and card (keeps form centered nicely)
+                    const SizedBox(height: 22),
+
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 20),
+                        horizontal: 16,
+                        vertical: 20,
+                      ),
                       decoration: BoxDecoration(
                         color: AppColors.authCard,
                         borderRadius: BorderRadius.circular(24),
@@ -134,12 +145,17 @@ class _LoginFormState extends State<_LoginForm> {
                               return null;
                             },
                           ),
-                          const SizedBox(height: 12),
+                          const SizedBox(height: 14),
+
                           _AuthTextField(
                             label: 'Password',
                             hint: 'Enter password',
                             controller: _passwordController,
-                            obscureText: true,
+                            obscureText: _obscurePassword,
+                            showEyeToggle: true,
+                            onToggleEye: () {
+                              setState(() => _obscurePassword = !_obscurePassword);
+                            },
                             validator: (value) {
                               if (value == null || value.isEmpty) {
                                 return 'Please enter your password';
@@ -150,7 +166,9 @@ class _LoginFormState extends State<_LoginForm> {
                               return null;
                             },
                           ),
-                          const SizedBox(height: 16),
+
+                          const SizedBox(height: 18),
+
                           SizedBox(
                             width: double.infinity,
                             child: ElevatedButton(
@@ -159,8 +177,7 @@ class _LoginFormState extends State<_LoginForm> {
                                   : () => _onLoginPressed(context),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppColors.primary,
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 14),
+                                padding: const EdgeInsets.symmetric(vertical: 14),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
                                 ),
@@ -184,7 +201,9 @@ class _LoginFormState extends State<_LoginForm> {
                                     ),
                             ),
                           ),
-                          const SizedBox(height: 8),
+
+                          const SizedBox(height: 10),
+
                           Align(
                             alignment: Alignment.centerRight,
                             child: GestureDetector(
@@ -202,43 +221,12 @@ class _LoginFormState extends State<_LoginForm> {
                               ),
                             ),
                           ),
-                          const SizedBox(height: 8),
-                          Row(
-                            children: const [
-                              Expanded(child: Divider()),
-                              Padding(
-                                padding: EdgeInsets.symmetric(horizontal: 8.0),
-                                child: Text(
-                                  'or',
-                                  style: TextStyle(fontSize: 12),
-                                ),
-                              ),
-                              Expanded(child: Divider()),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          SizedBox(
-                            width: double.infinity,
-                            child: OutlinedButton.icon(
-                              onPressed: () {
-                                // Google sign in later
-                              },
-                              icon: const Icon(Icons.g_mobiledata, size: 24),
-                              label: const Text('Log in with Google'),
-                              style: OutlinedButton.styleFrom(
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 12),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                backgroundColor: Colors.white,
-                              ),
-                            ),
-                          ),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 16),
+
+                    const SizedBox(height: 18),
+
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -261,6 +249,8 @@ class _LoginFormState extends State<_LoginForm> {
                         ),
                       ],
                     ),
+
+                    const SizedBox(height: 10),
                   ],
                 ),
               ),
@@ -277,6 +267,10 @@ class _AuthTextField extends StatelessWidget {
   final String hint;
   final TextEditingController controller;
   final bool obscureText;
+
+  final bool showEyeToggle;
+  final VoidCallback? onToggleEye;
+
   final TextInputType? keyboardType;
   final String? Function(String?)? validator;
 
@@ -285,12 +279,17 @@ class _AuthTextField extends StatelessWidget {
     required this.hint,
     required this.controller,
     this.obscureText = false,
+    this.showEyeToggle = false,
+    this.onToggleEye,
     this.keyboardType,
     this.validator,
   });
 
   @override
   Widget build(BuildContext context) {
+    final eyeIcon =
+        obscureText ? Icons.visibility_off_outlined : Icons.visibility_outlined;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -317,6 +316,12 @@ class _AuthTextField extends StatelessWidget {
               borderRadius: BorderRadius.circular(16),
               borderSide: BorderSide.none,
             ),
+            suffixIcon: showEyeToggle
+                ? IconButton(
+                    onPressed: onToggleEye,
+                    icon: Icon(eyeIcon, color: AppColors.primary),
+                  )
+                : null,
           ),
         ),
       ],
