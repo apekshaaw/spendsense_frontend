@@ -54,7 +54,7 @@ class _ChangePasswordViewState extends State<ChangePasswordView> {
     try {
       final headers = await AuthHeaders.json();
 
-      final res = await http.patch(
+      final res = await http.post(
         _changePasswordUri(),
         headers: headers,
         body: jsonEncode({
