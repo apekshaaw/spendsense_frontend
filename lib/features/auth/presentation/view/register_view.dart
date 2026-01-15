@@ -34,6 +34,9 @@ class _RegisterFormState extends State<_RegisterForm> {
 
   final _formKey = GlobalKey<FormState>();
 
+  bool _obscurePassword = true; // ✅ eye toggle
+  bool _obscureConfirmPassword = true; // ✅ eye toggle
+
   @override
   void dispose() {
     _nameController.dispose();
@@ -72,8 +75,7 @@ class _RegisterFormState extends State<_RegisterForm> {
 
             if (state.status == RegisterStatus.success) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                    content: Text('Account created successfully')),
+                const SnackBar(content: Text('Account created successfully')),
               );
               Navigator.of(context).pushNamedAndRemoveUntil(
                 AppRoutes.home,
@@ -85,8 +87,7 @@ class _RegisterFormState extends State<_RegisterForm> {
             final isLoading = state.status == RegisterStatus.loading;
 
             return SingleChildScrollView(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
               child: Form(
                 key: _formKey,
                 child: Column(
@@ -121,7 +122,9 @@ class _RegisterFormState extends State<_RegisterForm> {
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 20),
+                        horizontal: 16,
+                        vertical: 20,
+                      ),
                       decoration: BoxDecoration(
                         color: AppColors.authCard,
                         borderRadius: BorderRadius.circular(24),
@@ -156,11 +159,17 @@ class _RegisterFormState extends State<_RegisterForm> {
                             },
                           ),
                           const SizedBox(height: 12),
+
+                          // ✅ Password with eye toggle
                           _AuthTextField(
                             label: 'Password',
                             hint: 'Enter password',
                             controller: _passwordController,
-                            obscureText: true,
+                            obscureText: _obscurePassword,
+                            showEyeToggle: true,
+                            onToggleEye: () {
+                              setState(() => _obscurePassword = !_obscurePassword);
+                            },
                             validator: (value) {
                               if (value == null || value.isEmpty) {
                                 return 'Please enter a password';
@@ -172,11 +181,17 @@ class _RegisterFormState extends State<_RegisterForm> {
                             },
                           ),
                           const SizedBox(height: 12),
+
+                          // ✅ Confirm password with eye toggle
                           _AuthTextField(
                             label: 'Confirm Password',
                             hint: 'Enter password',
                             controller: _confirmPasswordController,
-                            obscureText: true,
+                            obscureText: _obscureConfirmPassword,
+                            showEyeToggle: true,
+                            onToggleEye: () {
+                              setState(() => _obscureConfirmPassword = !_obscureConfirmPassword);
+                            },
                             validator: (value) {
                               if (value == null || value.isEmpty) {
                                 return 'Please confirm your password';
@@ -187,17 +202,15 @@ class _RegisterFormState extends State<_RegisterForm> {
                               return null;
                             },
                           ),
+
                           const SizedBox(height: 16),
                           SizedBox(
                             width: double.infinity,
                             child: ElevatedButton(
-                              onPressed: isLoading
-                                  ? null
-                                  : () => _onSignUpPressed(context),
+                              onPressed: isLoading ? null : () => _onSignUpPressed(context),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppColors.primary,
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 14),
+                                padding: const EdgeInsets.symmetric(vertical: 14),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
                                 ),
@@ -208,48 +221,17 @@ class _RegisterFormState extends State<_RegisterForm> {
                                       width: 18,
                                       child: CircularProgressIndicator(
                                         strokeWidth: 2,
-                                        valueColor:
-                                            AlwaysStoppedAnimation(Colors.white),
+                                        valueColor: AlwaysStoppedAnimation(Colors.white),
                                       ),
                                     )
                                   : const Text(
                                       'Sign up',
-                                      style: TextStyle(
-                                          fontSize: 16, color: Colors.white),
+                                      style: TextStyle(fontSize: 16, color: Colors.white),
                                     ),
                             ),
                           ),
-                          const SizedBox(height: 10),
-                          Row(
-                            children: const [
-                              Expanded(child: Divider()),
-                              Padding(
-                                padding: EdgeInsets.symmetric(horizontal: 8.0),
-                                child: Text('or'),
-                              ),
-                              Expanded(child: Divider()),
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-                          SizedBox(
-                            width: double.infinity,
-                            child: OutlinedButton.icon(
-                              onPressed: () {
-                                // Google signup later
-                              },
-                              icon:
-                                  const Icon(Icons.g_mobiledata, size: 24),
-                              label: const Text('Sign up with Google'),
-                              style: OutlinedButton.styleFrom(
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 12),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                backgroundColor: Colors.white,
-                              ),
-                            ),
-                          ),
+
+                          // ✅ removed "or" divider + Google signup button
                         ],
                       ),
                     ),
@@ -264,8 +246,7 @@ class _RegisterFormState extends State<_RegisterForm> {
                           ),
                           GestureDetector(
                             onTap: () {
-                              Navigator.of(context)
-                                  .pushReplacementNamed(AppRoutes.login);
+                              Navigator.of(context).pushReplacementNamed(AppRoutes.login);
                             },
                             child: const Text(
                               'Log in',
@@ -295,6 +276,11 @@ class _AuthTextField extends StatelessWidget {
   final String hint;
   final TextEditingController controller;
   final bool obscureText;
+
+  // ✅ NEW for eye toggle
+  final bool showEyeToggle;
+  final VoidCallback? onToggleEye;
+
   final TextInputType? keyboardType;
   final String? Function(String?)? validator;
 
@@ -303,12 +289,16 @@ class _AuthTextField extends StatelessWidget {
     required this.hint,
     required this.controller,
     this.obscureText = false,
+    this.showEyeToggle = false,
+    this.onToggleEye,
     this.keyboardType,
     this.validator,
   });
 
   @override
   Widget build(BuildContext context) {
+    final eyeIcon = obscureText ? Icons.visibility_off_outlined : Icons.visibility_outlined;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -329,12 +319,17 @@ class _AuthTextField extends StatelessWidget {
             hintText: hint,
             filled: true,
             fillColor: Colors.white,
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(16),
               borderSide: BorderSide.none,
             ),
+            suffixIcon: showEyeToggle
+                ? IconButton(
+                    onPressed: onToggleEye,
+                    icon: Icon(eyeIcon, color: AppColors.primary),
+                  )
+                : null,
           ),
         ),
       ],
