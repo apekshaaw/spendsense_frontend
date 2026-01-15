@@ -51,6 +51,95 @@ class _ProfileViewState extends State<ProfileView> {
     Navigator.of(context).pushNamedAndRemoveUntil(AppRoutes.welcome, (r) => false);
   }
 
+  void _showLogoutDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierColor: Colors.black.withOpacity(0.45),
+      builder: (_) {
+        return Dialog(
+          insetPadding: const EdgeInsets.symmetric(horizontal: 26),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 6),
+                Text(
+                  'Log Out',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.primary,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'Are You Sure You Want To Log Out?',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
+                    height: 1.35,
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // ✅ Yes, Log Out (filled)
+                SizedBox(
+                  width: double.infinity,
+                  height: 46,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.of(context).pop(); // close popup first
+                      _logout();
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    child: const Text(
+                      'Yes, Log Out',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 10),
+
+                // ✅ Cancel (outlined)
+                SizedBox(
+                  width: double.infinity,
+                  height: 46,
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.primary,
+                      side: BorderSide(color: AppColors.primary, width: 1.2),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    child: const Text(
+                      'Cancel',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   ImageProvider _avatarProvider(String avatarUrl) {
     if (avatarUrl.isEmpty) {
       return const AssetImage('assets/images/default_avatar.png');
@@ -68,7 +157,8 @@ class _ProfileViewState extends State<ProfileView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFEAF5FF),    bottomNavigationBar: SpendSenseBottomNavBar(
+      backgroundColor: const Color(0xFFEAF5FF),
+      bottomNavigationBar: SpendSenseBottomNavBar(
         currentIndex: _currentIndex,
         onTabSelected: _onNavTap,
       ),
@@ -106,13 +196,11 @@ class _ProfileViewState extends State<ProfileView> {
                           ],
                         ),
                         const SizedBox(height: 8),
-
                         CircleAvatar(
                           radius: 44,
                           backgroundImage: _avatarProvider(profile?.avatarUrl ?? ""),
                         ),
                         const SizedBox(height: 12),
-
                         Text(
                           profile?.name ?? "Loading...",
                           style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
@@ -123,13 +211,11 @@ class _ProfileViewState extends State<ProfileView> {
                           style: const TextStyle(fontSize: 13, color: AppColors.textGrey),
                         ),
                         const SizedBox(height: 12),
-
                         if (state.status == ProfileStatus.loading && profile == null)
                           const Padding(
                             padding: EdgeInsets.only(top: 10),
                             child: CircularProgressIndicator(),
                           ),
-
                         if (state.status == ProfileStatus.error)
                           Padding(
                             padding: const EdgeInsets.only(top: 10),
@@ -168,16 +254,17 @@ class _ProfileViewState extends State<ProfileView> {
                           icon: Icons.headset_mic_outlined,
                           label: 'Help',
                           onTap: () {
-  Navigator.of(context).pushNamed(AppRoutes.help);
-},
-
+                            Navigator.of(context).pushNamed(AppRoutes.help);
+                          },
                         ),
                         const SizedBox(height: 16),
+
+                        // ✅ Logout now opens popup (no new page)
                         ProfileOptionTile(
                           icon: Icons.logout_rounded,
                           label: 'Logout',
                           isDestructive: true,
-                          onTap: _logout,
+                          onTap: _showLogoutDialog,
                         ),
                       ],
                     ),
