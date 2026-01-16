@@ -179,7 +179,7 @@ class _GoalProgressViewState extends State<GoalProgressView> {
     return _wants.where((w) {
       if (w.createdAt == null) return false;
       if (w.createdAt!.isBefore(start)) return false;
-      return (w.status ?? '') == 'skipped';
+      return (w.status) == 'skipped';
     }).length;
   }
 
@@ -188,7 +188,7 @@ class _GoalProgressViewState extends State<GoalProgressView> {
     return _wants.where((w) {
       if (w.createdAt == null) return false;
       if (w.createdAt!.isBefore(start)) return false;
-      return (w.status ?? '') == 'purchased';
+      return (w.status) == 'purchased';
     }).length;
   }
 
@@ -198,8 +198,8 @@ class _GoalProgressViewState extends State<GoalProgressView> {
     for (final w in _wants) {
       if (w.createdAt == null) continue;
       if (w.createdAt!.isBefore(start)) continue;
-      if ((w.status ?? '') != 'skipped') continue;
-      sum += (w.price ?? 0);
+      if ((w.status) != 'skipped') continue;
+      sum += (w.price);
     }
     return sum;
   }
@@ -210,8 +210,8 @@ class _GoalProgressViewState extends State<GoalProgressView> {
     for (final w in _wants) {
       if (w.createdAt == null) continue;
       if (w.createdAt!.isBefore(start)) continue;
-      if ((w.status ?? '') != 'purchased') continue;
-      sum += (w.price ?? 0);
+      if ((w.status) != 'purchased') continue;
+      sum += (w.price);
     }
     return sum;
   }

@@ -164,15 +164,6 @@ class _StatsViewState extends State<StatsView> {
   }
 
   // weekly aggregates
-  int get _skippedThisWeekCount {
-    int c = 0;
-    for (final w in _wants) {
-      if ((w['status'] ?? '') != 'skipped') continue;
-      if (_isInLast7Days(_wantEffectiveDate(w))) c++;
-    }
-    return c;
-  }
-
   double get _skippedThisWeekTotal {
     double sum = 0;
     for (final w in _wants) {
