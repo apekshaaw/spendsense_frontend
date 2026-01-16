@@ -180,51 +180,40 @@ class _HomeViewState extends State<HomeView> {
     return DateTime.tryParse(v.toString());
   }
 
-  DateTime _startOfDay(DateTime dt) => DateTime(dt.year, dt.month, dt.day);
-
-  int _daysBetweenStart(DateTime from, DateTime to) {
-    return _startOfDay(to).difference(_startOfDay(from)).inDays;
-  }
-
   DateTime? _wantEffectiveDate(Map<String, dynamic> w) {
     return _parseDate(w['updatedAt']) ?? _parseDate(w['createdAt']);
   }
 
-  /// STREAK RULES
-  int get _impulseFreeStreakDays {
-    final now = DateTime.now();
+  /// STREAK RULES (match StatsView)
+int get _impulseFreeStreakDays {
+  if (_wants.isEmpty) return 0;
 
-    DateTime? lastPurchased;
-    DateTime? firstSkipped;
+  DateTime? lastSkip;
+  DateTime? lastPurchase;
 
-    for (final w in _wants) {
-      final status = (w['status'] ?? '').toString();
-      final dt = _wantEffectiveDate(w);
-      if (dt == null) continue;
+  for (final w in _wants) {
+    final status = (w['status'] ?? '').toString();
+    final dt = _wantEffectiveDate(w);
+    if (dt == null) continue;
 
-      if (status == 'purchased') {
-        if (lastPurchased == null || dt.isAfter(lastPurchased)) {
-          lastPurchased = dt;
-        }
-      }
-
-      if (status == 'skipped') {
-        if (firstSkipped == null || dt.isBefore(firstSkipped)) {
-          firstSkipped = dt;
-        }
-      }
+    if (status == 'skipped') {
+      if (lastSkip == null || dt.isAfter(lastSkip)) lastSkip = dt;
+    } else if (status == 'purchased') {
+      if (lastPurchase == null || dt.isAfter(lastPurchase)) lastPurchase = dt;
     }
-
-    if (lastPurchased != null) {
-      return _daysBetweenStart(lastPurchased, now).clamp(0, 9999);
-    }
-
-    if (firstSkipped != null) {
-      return (_daysBetweenStart(firstSkipped, now) + 1).clamp(1, 9999);
-    }
-
-    return 0;
   }
+
+  // no skip yet => no streak
+  if (lastSkip == null) return 0;
+
+  // if a purchase happened AFTER your last skip => streak resets to 0
+  if (lastPurchase != null && lastPurchase.isAfter(lastSkip)) return 0;
+
+  // otherwise streak = 1 + days since last skip
+  final now = DateTime.now();
+  final daysSinceSkip = now.difference(lastSkip).inDays.clamp(0, 9999);
+  return 1 + daysSinceSkip;
+}
 
   int get _levelFromStreak {
     final d = _impulseFreeStreakDays;
