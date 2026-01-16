@@ -154,13 +154,14 @@ class _DeleteAccountViewState extends State<DeleteAccountView> {
       final headers = await AuthHeaders.json();
       if (!mounted) return;
 
-      final res = await http.delete(
-        Uri.parse(ApiEndpoints.deleteAccount),
-        headers: headers,
-        body: jsonEncode({
-          "password": _passwordController.text.trim(),
-        }),
-      );
+      final res = await http.post(
+  Uri.parse(ApiEndpoints.deleteAccount),
+  headers: headers,
+  body: jsonEncode({
+    "password": _passwordController.text.trim(),
+  }),
+);
+
 
       if (!mounted) return;
 
