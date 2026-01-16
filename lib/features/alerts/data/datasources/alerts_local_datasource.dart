@@ -2,24 +2,31 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/alert_model.dart';
 
 class AlertsLocalDataSource {
-  static const _key = 'alerts_feed_v1';
+  static const _baseKey = 'alerts_feed_v1';
   static const _maxItems = 200;
+
+  Future<String> _key() async {
+    final prefs = await SharedPreferences.getInstance();
+    final uid = prefs.getString('current_user_id_v1') ?? 'guest';
+    return '$_baseKey:$uid';
+  }
 
   Future<List<AlertModel>> getAll() async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_key);
+    final key = await _key();
+    final raw = prefs.getString(key);
     if (raw == null || raw.isEmpty) return [];
     final list = AlertModel.decodeList(raw);
 
-    // newest first
     list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     return list;
   }
 
   Future<void> saveAll(List<AlertModel> items) async {
     final prefs = await SharedPreferences.getInstance();
+    final key = await _key();
     final trimmed = items.take(_maxItems).toList();
-    await prefs.setString(_key, AlertModel.encodeList(trimmed));
+    await prefs.setString(key, AlertModel.encodeList(trimmed));
   }
 
   Future<void> add(AlertModel alert) async {
@@ -31,9 +38,7 @@ class AlertsLocalDataSource {
   Future<void> markReminderResolvedByAlertId(String alertId) async {
     final list = await getAll();
     final updated = list.map((a) {
-      if (a.id == alertId) {
-        return a.copyWith(reminderPending: false);
-      }
+      if (a.id == alertId) return a.copyWith(reminderPending: false);
       return a;
     }).toList();
     await saveAll(updated);
@@ -57,13 +62,12 @@ class AlertsLocalDataSource {
     return pending.first;
   }
 
-  /// ✅ Clear everything
   Future<void> clearAll() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_key);
+    final key = await _key();
+    await prefs.remove(key);
   }
 
-  /// ✅ Clear only a specific type (Action / Reminder / Progress)
   Future<void> clearByType(AlertType type) async {
     final list = await getAll();
     final filtered = list.where((a) => a.type != type).toList();

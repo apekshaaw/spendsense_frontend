@@ -21,8 +21,7 @@ String _typeTo(AlertType t) {
     case AlertType.reminder:
       return 'reminder';
     case AlertType.action:
-    default:
-      return 'action';
+    return 'action';
   }
 }
 
