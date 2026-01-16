@@ -112,23 +112,23 @@ class _AllWantsViewState extends State<AllWantsView> {
   }
 
   Future<void> _deleteWant(String id) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Delete want?'),
-        content: const Text('This will permanently delete this want.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
+  final confirm = await showDialog<bool>(
+    context: context,
+    builder: (dialogCtx) => AlertDialog(
+      title: const Text('Delete want?'),
+      content: const Text('This will permanently delete this want.'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogCtx).pop(false), 
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(dialogCtx).pop(true), 
+          child: const Text('Delete'),
+        ),
+      ],
+    ),
+  );
 
     if (confirm != true) return;
 
