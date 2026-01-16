@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart'; // ✅ ADD THIS
 
 import '../../../../core/constants/api_endpoints.dart';
 import '../../../../core/error/failure.dart';
@@ -28,6 +29,24 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
 
   AuthRemoteDataSourceImpl({http.Client? client})
       : client = client ?? http.Client();
+
+  /// ✅ helper: store current user id for user-specific storage (alerts, streak, etc.)
+  Future<void> _saveCurrentUserId(dynamic userDataRaw) async {
+    try {
+      if (userDataRaw is! Map<String, dynamic>) return;
+
+      final userId = (userDataRaw['id'] ?? userDataRaw['_id'] ?? '').toString();
+      if (userId.isEmpty) return;
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('current_user_id_v1', userId);
+
+      // (optional) cleanup old global alerts key once
+      // await prefs.remove('alerts_feed_v1');
+    } catch (_) {
+      // don't crash login if this fails
+    }
+  }
 
   @override
   Future<UserModel> login({
@@ -62,7 +81,7 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
           throw Failure('Login success but token missing from response.');
         }
 
-        // ✅ write token in a consistent way for the whole app
+        // ✅ store token consistently
         await TokenStorage.write(token);
 
         // ignore: avoid_print
@@ -73,6 +92,9 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
         if (userDataRaw is! Map<String, dynamic>) {
           throw Failure('Invalid response format from server (user missing).');
         }
+
+        // ✅ THIS IS THE EXACT PLACE: save userId AFTER userDataRaw is available
+        await _saveCurrentUserId(userDataRaw);
 
         final userData = <String, dynamic>{
           ...userDataRaw,
@@ -138,7 +160,7 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
           throw Failure('Signup success but token missing from response.');
         }
 
-        // ✅ write token in a consistent way for the whole app
+        // ✅ store token consistently
         await TokenStorage.write(token);
 
         // ignore: avoid_print
@@ -149,6 +171,9 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
         if (userDataRaw is! Map<String, dynamic>) {
           throw Failure('Invalid response format from server (user missing).');
         }
+
+        // ✅ THIS IS THE EXACT PLACE: save userId AFTER userDataRaw is available
+        await _saveCurrentUserId(userDataRaw);
 
         final userData = <String, dynamic>{
           ...userDataRaw,
