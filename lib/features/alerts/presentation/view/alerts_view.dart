@@ -91,8 +91,7 @@ class _AlertsViewState extends State<AlertsView> {
       case AlertType.progress:
         return Icons.emoji_events_rounded;
       case AlertType.action:
-      default:
-        return Icons.notifications_active_rounded;
+      return Icons.notifications_active_rounded;
     }
   }
 
